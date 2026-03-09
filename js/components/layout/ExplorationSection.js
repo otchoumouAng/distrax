@@ -1,0 +1,444 @@
+/**
+ * ExplorationSection — Affiche les dernières envies depuis l'API.
+ * Gère le filtrage par catégorie (filter-pills) et la pagination infinie.
+ */
+export class ExplorationSection extends HTMLElement {
+    constructor() {
+        super();
+        this._activeCategory = null;
+        this._activeFilters = {}; // { query, commune, price_type } depuis la modale Filtres
+        this._desires = [];
+        this._loading = false;
+        this._pageSize = 10;
+        this._currentPage = 1;
+        this._hasMore = true;
+        this._loadMoreObserver = null;
+        // Note: _myUserId n'est pas caché ici, il est lu depuis le localStorage à chaque loadDesires
+    }
+
+    connectedCallback() {
+        this.innerHTML = `
+            <section class="exploration-section" id="explorationSection">
+                <div class="exploration-header">
+                    <h2 class="exploration-title">Dernières envies autour de vous</h2>
+                </div>
+
+                <!-- Sentinelle pour sticky -->
+                <div class="filters-sentinel" style="height: 1px; width: 100%;"></div>
+
+                <div class="filters-container" id="explorationFilters">
+                    <filter-pill icon="tune" id="filterOpenBtn">Filtres</filter-pill>
+                    <span id="categoryPillsLoading" style="display:inline-block; color: var(--text-light); font-size: 13px; padding: 6px 8px;">Chargement...</span>
+                    
+                    <div style="width: 1px; height: 24px; background: var(--border-light); align-self: center; margin: 0 4px;"></div>
+                    <button class="create-quick-btn" title="Créer une envie" id="quickCreateBtn">
+                        <i class="material-icons-round">add</i> Créer
+                    </button>
+                </div>
+
+                <div class="exploration-grid" id="explorationGrid">
+                    <!-- Skeletons de chargement -->
+                    ${this._skeletons(3)}
+                </div>
+
+                <div id="loadMoreArea" style="text-align: center; padding: 20px 0; display: none;">
+                    <button id="loadMoreBtn" style="background: var(--bg-card); border: 1px solid var(--border-light); color: var(--text-main); padding: 12px 28px; border-radius: 100px; font-weight: 600; cursor: pointer;">
+                        Voir plus
+                    </button>
+                    <p id="loadMoreHint" style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">Défilez pour charger plus</p>
+                    <p id="exploreEndHint" style="display: none; margin-top: 8px; font-size: 12px; color: var(--text-muted);">Vous avez atteint la fin de la liste.</p>
+                </div>
+
+                <footer class="page-footer">
+                    <span>© 2026 Distrax</span><span class="dot">•</span>
+                    <span>Fait avec <i class="material-icons-round heart">favorite</i></span><span class="dot">•</span>
+                    <a href="#">Confidentialité</a>
+                </footer>
+            </section>
+        `;
+
+        this.setupStickyObserver();
+        this.setupListeners();
+        this._loadCategoryPills();
+        this.loadDesires();
+        this.setupInfiniteScroll();
+    }
+
+    disconnectedCallback() {
+        if (this._loadMoreObserver) {
+            this._loadMoreObserver.disconnect();
+            this._loadMoreObserver = null;
+        }
+    }
+
+    _skeletons(n) {
+        return Array.from({ length: n }, () => `
+            <div class="desire-card" style="background: var(--bg-card); border-radius: 20px; padding: 16px; animation: pulse 1.4s ease-in-out infinite;">
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 12px;">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--border-light);"></div>
+                    <div style="flex: 1;">
+                        <div style="height: 12px; width: 40%; background: var(--border-light); border-radius: 6px; margin-bottom: 6px;"></div>
+                        <div style="height: 10px; width: 25%; background: var(--border-light); border-radius: 6px;"></div>
+                    </div>
+                </div>
+                <div style="height: 18px; width: 85%; background: var(--border-light); border-radius: 6px; margin-bottom: 10px;"></div>
+                <div style="height: 12px; width: 60%; background: var(--border-light); border-radius: 6px;"></div>
+            </div>
+        `).join('');
+    }
+
+    _themeFromCategory(cat) {
+        const map = { sport: 'sport', detente: 'chill', apprentissage: 'learn', rencontres: 'rencontres', sorties: 'explore', decouverte: 'explore' };
+        return map[cat] || 'explore';
+    }
+
+    _formatDate(iso) {
+        if (!iso) return 'Date à confirmer';
+        const d = new Date(iso);
+        return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+
+    _formatPrice(desire) {
+        if (desire.price_type === 'free') return 'Gratuit';
+        if (desire.price_type === 'contribution') return 'Contribution libre';
+        const amount = desire.price_amount;
+        return amount ? `${amount.toLocaleString('fr-FR')} FCFA` : 'Payant';
+    }
+
+    _timeAgo(isoDate) {
+        const diff = (Date.now() - new Date(isoDate)) / 1000;
+        if (diff < 60) return 'À l\'instant';
+        if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
+        if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)}h`;
+        return `Il y a ${Math.floor(diff / 86400)} jour(s)`;
+    }
+
+    renderDesires(desires, append = false, myUserId = null) {
+        const grid = this.querySelector('#explorationGrid');
+        if (!append) grid.innerHTML = '';
+
+        if (desires.length === 0 && !append) {
+            grid.innerHTML = `
+                <div style="text-align: center; padding: 60px 20px; color: var(--text-muted); grid-column: 1 / -1;">
+                    <i class="material-icons-round" style="font-size: 48px; opacity: 0.3; display: block; margin-bottom: 12px;">search_off</i>
+                    <p>Aucune envie dans cette catégorie pour le moment.</p>
+                    <p style="font-size: 13px; margin-top: 4px;">Soyez le premier à en créer une !</p>
+                </div>`;
+            return;
+        }
+
+        desires.forEach(d => {
+            const card = document.createElement('desire-card');
+            card.setAttribute('theme', this._themeFromCategory(d.category));
+            card.setAttribute('title', d.title);
+            card.setAttribute('author', d.author_pseudo || 'Anonyme');
+            card.setAttribute('time-ago', this._timeAgo(d.created_at));
+            card.setAttribute('avatar', d.author_avatar_url || '/assets/img/avatar.png');
+            card.setAttribute('date', this._formatDate(d.event_date));
+            card.setAttribute('price', this._formatPrice(d));
+            card.setAttribute('commune', d.commune || 'Abidjan');
+            card.setAttribute('spots', `${d.spots_taken}/${d.max_spots} places`);
+            card.setAttribute('btn-text', 'Rejoindre');
+            card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
+            card.setAttribute('description', d.description || '');
+            card.dataset.desireId = d.id;
+            card.setAttribute('desire-id', d.id); // requis par getAttribute('desire-id') dans DesireCard
+            card.dataset.authorId = d.author_id || ''; // pour que desire-view l'inclue
+
+            // Si la carte appartient à l'utilisateur connecté : mode owner
+            if (myUserId && d.author_id && myUserId === d.author_id) {
+                card.setAttribute('mode', 'owner');
+            }
+
+            // Clic sur rejoindre → ouvre le panneau détails (sans déclencher le toast)
+            card.addEventListener('desire-joined', (e) => {
+                e.stopPropagation(); // Empêche desire-joined de remonter à window (et le toast)
+                const event = new CustomEvent('view-desire', {
+                    detail: {
+                        id: d.id,
+                        authorId: d.author_id || null,
+                        title: d.title,
+                        author: d.author_pseudo || 'Anonyme',
+                        timeAgo: this._timeAgo(d.created_at),
+                        commune: d.commune || 'Abidjan',
+                        date: this._formatDate(d.event_date),
+                        spots: `${d.spots_taken}/${d.max_spots} places`,
+                        price: this._formatPrice(d),
+                        avatar: d.author_avatar_url || '/assets/img/avatar.png',
+                        images: d.images || [],
+                        description: d.description || '',
+                        price_type: d.price_type,
+                    },
+                    bubbles: true, composed: true,
+                });
+                this.dispatchEvent(event);
+            });
+
+            grid.appendChild(card);
+        });
+    }
+
+    _extractPagedItems(data) {
+        if (Array.isArray(data)) {
+            return { items: data, hasMore: data.length >= this._pageSize };
+        }
+
+        const items = Array.isArray(data?.items)
+            ? data.items
+            : Array.isArray(data?.results)
+                ? data.results
+                : Array.isArray(data?.data)
+                    ? data.data
+                    : [];
+
+        let hasMore = items.length >= this._pageSize;
+        if (typeof data?.has_next === 'boolean') hasMore = data.has_next;
+        if (typeof data?.hasMore === 'boolean') hasMore = data.hasMore;
+        if (data?.next_page !== undefined && data?.next_page !== null) hasMore = true;
+
+        return { items, hasMore };
+    }
+
+    _updateLoadMoreUi() {
+        const loadMoreArea = this.querySelector('#loadMoreArea');
+        const loadMoreBtn = this.querySelector('#loadMoreBtn');
+        const loadMoreHint = this.querySelector('#loadMoreHint');
+        const endHint = this.querySelector('#exploreEndHint');
+        if (!loadMoreArea || !loadMoreBtn) return;
+
+        const hasCards = this._desires.length > 0;
+        loadMoreArea.style.display = hasCards ? 'block' : 'none';
+        loadMoreBtn.disabled = this._loading;
+        loadMoreBtn.textContent = this._loading ? 'Chargement...' : 'Voir plus';
+        if (loadMoreHint) loadMoreHint.style.display = this._hasMore && !this._loading ? 'block' : 'none';
+        loadMoreBtn.style.display = this._hasMore ? 'inline-flex' : 'none';
+        if (endHint) endHint.style.display = hasCards && !this._hasMore ? 'block' : 'none';
+    }
+
+    setupInfiniteScroll() {
+        const loadMoreArea = this.querySelector('#loadMoreArea');
+        if (!loadMoreArea) return;
+
+        this._loadMoreObserver = new IntersectionObserver(
+            (entries) => {
+                const isVisible = entries.some((entry) => entry.isIntersecting);
+                if (!isVisible) return;
+                if (this._loading || !this._hasMore) return;
+                if (document.body.classList.contains('state-results')) return;
+                if (this.offsetParent === null) return;
+                this.loadDesires(true);
+            },
+            { root: null, rootMargin: '220px 0px', threshold: 0.01 }
+        );
+
+        this._loadMoreObserver.observe(loadMoreArea);
+    }
+
+    async loadDesires(append = false) {
+        if (this._loading) return;
+        if (append && !this._hasMore) return;
+        this._loading = true;
+        if (!append) {
+            this._currentPage = 1;
+            this._hasMore = true;
+        }
+        this._updateLoadMoreUi();
+
+        // Toujours relire l'ID utilisateur depuis localStorage (à jour après login/logout)
+        let myUserId = null;
+        try {
+            const { api } = await import('../../api.js');
+            if (api.isAuthenticated()) {
+                const cached = JSON.parse(localStorage.getItem('distrax-user') || 'null');
+                myUserId = cached?.id || null;
+                if (!myUserId) {
+                    const me = await api.getMe();
+                    myUserId = me?.id || null;
+                }
+            }
+
+            // Charger les envies (catégorie + filtres modale)
+            const filters = { ...this._activeFilters };
+            if (this._activeCategory) filters.category = this._activeCategory;
+            filters.page = this._currentPage;
+            filters.size = this._pageSize;
+
+            const data = await api.fetchDesires(filters);
+            const { items: desires, hasMore } = this._extractPagedItems(data);
+            this._hasMore = hasMore;
+
+            if (append) {
+                this._desires = [...this._desires, ...desires];
+            } else {
+                this._desires = desires;
+            }
+
+            this.renderDesires(desires, append, myUserId);
+            if (desires.length > 0) {
+                this._currentPage += 1;
+            }
+
+            this._updateLoadMoreUi();
+
+            // Marquer les envies déjà rejointes APRÈS le render (asynchrone pour ne pas bloquer)
+            if (api.isAuthenticated() && !append) {
+                this._markJoinedDesires(api, myUserId).catch(() => { });
+            }
+
+        } catch (err) {
+            console.warn('Chargement des envies échoué:', err.message);
+            if (!append) {
+                this.querySelector('#explorationGrid').innerHTML = `
+                    <div style="text-align: center; padding: 32px 16px; color: var(--text-muted); grid-column: 1 / -1;">
+                        <i class="material-icons-round" style="font-size: 48px; opacity: 0.5; margin-bottom: 12px;">error_outline</i>
+                        <p>Impossible de charger les envies réelles pour le moment.</p>
+                    </div>
+                `;
+            }
+        } finally {
+            this._loading = false;
+            this._updateLoadMoreUi();
+        }
+    }
+
+    /**
+     * Charge les envies rejointes et met les cartes correspondantes en mode='joined'.
+     * Appelé de manière asynchrone après renderDesires() pour ne pas bloquer l'affichage.
+     */
+    async _markJoinedDesires(api, myUserId) {
+        try {
+            const joined = await api.getJoinedDesires();
+            if (!Array.isArray(joined) || joined.length === 0) return;
+
+            const joinedIds = new Set(joined.map(d => String(d.id)));
+
+            const grid = this.querySelector('#explorationGrid');
+            if (!grid) return;
+
+            grid.querySelectorAll('desire-card').forEach(card => {
+                const cardId = String(card.dataset?.desireId || card.getAttribute('desire-id') || '');
+                if (!cardId) return;
+                // Ne pas écraser le mode 'owner'
+                if (card.getAttribute('mode') === 'owner') return;
+                if (joinedIds.has(cardId)) {
+                    card.setAttribute('mode', 'joined');
+                }
+            });
+        } catch (_) { /* silencieux, pas critique */ }
+    }
+
+    setupStickyObserver() {
+        const sentinel = this.querySelector('.filters-sentinel');
+        const container = this.querySelector('.filters-container');
+        if (!sentinel || !container) return;
+
+        new IntersectionObserver(
+            ([e]) => container.classList.toggle('is-stuck', e.intersectionRatio < 1),
+            { threshold: [1] }
+        ).observe(sentinel);
+    }
+
+    setupListeners() {
+        // Bouton filtres
+        this.querySelector('#filterOpenBtn')?.addEventListener('click', () => {
+            document.dispatchEvent(new CustomEvent('open-filters', { bubbles: true, composed: true }));
+        });
+
+        // Créer rapide
+        this.querySelector('#quickCreateBtn')?.addEventListener('click', () => {
+            document.dispatchEvent(new CustomEvent('navigate-creation', { bubbles: true, composed: true }));
+        });
+
+        // Filtres catégories — délégation sur le conteneur (pills chargées dynamiquement)
+        const filtersContainer = this.querySelector('#explorationFilters');
+        if (filtersContainer) {
+            filtersContainer.addEventListener('filter-toggled', (e) => {
+                const pill = e.target;
+                if (!pill.classList.contains('category-pill')) return;
+                const isNowActive = e.detail.active;
+                const category = pill.dataset.category;
+
+                // Exclusivité
+                if (isNowActive) {
+                    filtersContainer.querySelectorAll('.category-pill').forEach(p => {
+                        if (p !== pill) p.removeAttribute('active');
+                    });
+                    this._activeCategory = category;
+                } else {
+                    this._activeCategory = null;
+                }
+
+                // Easter egg Rencontres → Dark mode
+                if (category === 'rencontres' && isNowActive) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                } else {
+                    const rencontresPill = filtersContainer.querySelector('[data-category="rencontres"]');
+                    const rencontresActive = rencontresPill?.hasAttribute('active');
+                    document.documentElement.setAttribute('data-theme', rencontresActive ? 'dark' : 'light');
+                }
+
+                this.loadDesires();
+            });
+        }
+
+        // Charger plus
+        this.querySelector('#loadMoreBtn')?.addEventListener('click', () => this.loadDesires(true));
+
+        // Filtres appliqués depuis la modale
+        document.addEventListener('apply-filters', (e) => {
+            const d = e.detail || {};
+            this._activeFilters = {
+                query: d.query || undefined,
+                commune: d.commune || undefined,
+                price_type: d.price_type || undefined
+            };
+            this.loadDesires();
+        });
+    }
+
+    async _loadCategoryPills() {
+        const container = this.querySelector('#explorationFilters');
+        if (!container) return;
+        const loading = container.querySelector('#categoryPillsLoading');
+        const divider = container.querySelector('div[style*="1px"]');
+
+        try {
+            const { api } = await import('../../api.js');
+            const items = await api.getCategoriesFull();
+            if (loading) loading.remove();
+            if (Array.isArray(items) && items.length > 0) {
+                items.forEach(cat => {
+                    const pill = document.createElement('filter-pill');
+                    pill.setAttribute('icon', cat.icon || 'label');
+                    pill.setAttribute('interactive', '');
+                    pill.classList.add('category-pill');
+                    pill.dataset.category = cat.slug;
+                    pill.textContent = cat.label;
+                    // Insert before the divider
+                    container.insertBefore(pill, divider);
+                });
+            }
+        } catch (e) {
+            console.warn('[ExplorationSection] Catégories non chargées:', e.message);
+            if (loading) loading.remove();
+            // Fallback statique avec les slugs corrects
+            const fallback = [
+                { slug: 'sport', icon: 'sports_soccer', label: 'Sport' },
+                { slug: 'decouverte', icon: 'explore', label: 'Découverte' },
+                { slug: 'apprentissage', icon: 'school', label: 'Apprendre' },
+                { slug: 'rencontres', icon: 'people', label: 'Rencontres' },
+            ];
+            fallback.forEach(cat => {
+                const pill = document.createElement('filter-pill');
+                pill.setAttribute('icon', cat.icon);
+                pill.setAttribute('interactive', '');
+                pill.classList.add('category-pill');
+                pill.dataset.category = cat.slug;
+                pill.textContent = cat.label;
+                container.insertBefore(pill, divider);
+            });
+        }
+    }
+}
+
+customElements.define('app-exploration-section', ExplorationSection);

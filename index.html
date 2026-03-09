@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="description" content="Distrax — Trouvez et partagez des envies d'activités autour de vous. Sport, sorties, apprentissage, rencontres à Abidjan.">
+    <link rel="manifest" href="/manifest.json">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Distrax - De quoi avez-vous envie aujourd'hui ?">
+    <meta property="og:description" content="Trouvez et partagez des envies d'activités autour de vous. Sport, sorties, apprentissage, rencontres à Abidjan.">
+    <meta property="og:image" content="/assets/img/og-default.png">
+    <meta property="og:url" content="https://distrax.com/">
+    <meta property="og:locale" content="fr_FR">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Distrax - De quoi avez-vous envie aujourd'hui ?">
+    <meta name="twitter:description" content="Trouvez et partagez des envies d'activités autour de vous. Sport, sorties, apprentissage, rencontres à Abidjan.">
+
+    <title>Distrax - De quoi avez-vous envie aujourd'hui ?</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Styles pris en charge via Vite dans main.js -->
+
+</head>
+
+<body>
+
+    <div class="aurora-bg"></div>
+
+    <!-- Nos Web Components globaux -->
+    <app-navbar></app-navbar>
+    <app-results-header></app-results-header>
+
+    <div class="main-container">
+        <!-- Section Accueil -->
+        <app-home-hero></app-home-hero>
+
+        <!-- Section Exploration -->
+        <app-exploration-section></app-exploration-section>
+
+        <!-- Section Résultats -->
+        <app-results-content></app-results-content>
+
+        <!-- Pages SPA Additionnelles -->
+        <app-login-page></app-login-page>
+        <app-register-page></app-register-page>
+        <app-notification-page></app-notification-page>
+        <app-creation-page></app-creation-page>
+        <app-profile-page></app-profile-page>
+        <app-desire-details></app-desire-details>
+        <app-boost-page></app-boost-page>
+        <app-boost-details-page></app-boost-details-page>
+    </div>
+
+    <!-- Modales Globales (Hors du stacking context) -->
+    <app-filter-modal></app-filter-modal>
+
+    <!-- Le point d'entrée Vite qui importera et définira tous les composants -->
+    <script type="module" src="/js/main.ts"></script>
+</body>
+
+</html>

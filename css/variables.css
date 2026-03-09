@@ -1,0 +1,76 @@
+:root,
+[data-theme="light"] {
+    --primary: #0ea5e9;
+    --primary-light: #38bdf8;
+
+    /* Couleurs de fond claires */
+    --bg-main: #f8fafc;
+    --bg-card: #ffffff;
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.5);
+    --border-light: rgba(0, 0, 0, 0.05);
+
+    /* Textes clairs */
+    --text-main: #334155;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+
+    /* Aurora Background variables */
+    --aurora-c1: #f1f5f9;
+    --aurora-c2: #e0f2fe;
+    --aurora-c3: #f0fdf4;
+    --aurora-c4: #fdf4ff;
+    --aurora-overlay: rgba(255, 255, 255, 0.4);
+
+    --header-height: 80px;
+
+    /* Thèmes des envies */
+    --theme-explore: #3b82f6;
+    --theme-sport: #f97316;
+    --theme-chill: #10b981;
+    --theme-learn: #8b5cf6;
+}
+
+[data-theme="dark"] {
+    --primary: #f43f5e;
+    --primary-light: #fb7185;
+
+    /* Couleurs de fond sombres */
+    --bg-main: radial-gradient(120% 100% at 50% 10%, #150204 0%, #040000 50%, #000000 100%);
+    --bg-card: rgba(26, 10, 12, 0.5);
+    --glass-bg: rgba(18, 5, 7, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --border-light: rgba(255, 255, 255, 0.05);
+
+    /* Textes sombres */
+    --text-main: #f8fafc;
+    --text-muted: #a1a1aa;
+    --text-light: #71717a;
+
+    /* Aurora Background variables (dark mode variants) */
+    --aurora-c1: #150204;
+    --aurora-c2: #2a0a0f;
+    --aurora-c3: #000000;
+    --aurora-c4: #380d16;
+    --aurora-overlay: rgba(0, 0, 0, 0.85);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --primary: #f43f5e;
+        --primary-light: #fb7185;
+        --bg-main: radial-gradient(120% 100% at 50% 10%, #150204 0%, #040000 50%, #000000 100%);
+        --bg-card: rgba(26, 10, 12, 0.5);
+        --glass-bg: rgba(18, 5, 7, 0.75);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --border-light: rgba(255, 255, 255, 0.05);
+        --text-main: #f8fafc;
+        --text-muted: #a1a1aa;
+        --text-light: #71717a;
+        --aurora-c1: #150204;
+        --aurora-c2: #2a0a0f;
+        --aurora-c3: #000000;
+        --aurora-c4: #380d16;
+        --aurora-overlay: rgba(0, 0, 0, 0.85);
+    }
+}

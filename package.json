@@ -1,0 +1,21 @@
+{
+  "name": "distrax",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/run-with-env.cjs",
+    "dev:prod": "node scripts/run-with-env.cjs --mode prod",
+    "build": "node scripts/run-with-env.cjs build",
+    "build:dev": "vite build --mode dev",
+    "build:prod": "vite build --mode prod",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
