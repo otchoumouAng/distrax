@@ -99,9 +99,13 @@ psql "postgresql://distrax_user:MotDePasseTresSecurise123!@localhost:5432/distra
 cd /var/www
 sudo mkdir -p distrax-api
 sudo chown $USER:$USER distrax-api
-git clone <URL_DU_REPO_API> distrax-api
 cd distrax-api
+git clone <URL_DU_REPO_API> .    # le point "." clone directement dans le dossier courant
 ```
+
+> **Important** : Le `.` final est indispensable. Sans lui, Git crée un sous-dossier
+> supplémentaire (ex. `distrax-api/api-distrax/`) et les chemins dans systemd
+> et le venv seront incorrects.
 
 ### 3.2 Créer l'environnement virtuel Python
 
@@ -140,8 +144,6 @@ AWS_ACCESS_KEY_ID=<votre clé>
 AWS_SECRET_ACCESS_KEY=<votre secret>
 S3_BUCKET_NAME=distrax-uploads
 
-# Firebase (notifications push)
-FIREBASE_CREDENTIALS_PATH=/var/www/distrax-api/firebase-credentials.json
 ```
 
 Générer une `SECRET_KEY` sécurisée :
@@ -328,6 +330,9 @@ server {
 ### 5.3 Activer les sites
 
 ```bash
+# Désactiver la page par défaut de Nginx (sinon elle prend la priorité)
+sudo rm /etc/nginx/sites-enabled/default
+
 sudo ln -s /etc/nginx/sites-available/distrax     /etc/nginx/sites-enabled/
 sudo ln -s /etc/nginx/sites-available/distrax-api /etc/nginx/sites-enabled/
 
@@ -337,6 +342,10 @@ sudo nginx -t
 # Recharger Nginx
 sudo systemctl reload nginx
 ```
+
+> **Attention** : Si vous voyez "Welcome to nginx!" en accédant à l'IP, c'est que
+> le site `default` est encore actif. Vérifiez avec `ls /etc/nginx/sites-enabled/`
+> et supprimez le lien `default` si présent.
 
 ---
 
@@ -401,10 +410,14 @@ sudo tail -f /var/log/nginx/error.log
 ```bash
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
-sudo ufw allow 22/tcp
+sudo ufw allow 2222/tcp   # port SSH de ce serveur (22 sur un serveur standard)
 sudo ufw enable
 sudo ufw status
 ```
+
+> **Note** : Le port SSH par défaut est 22. Sur ce serveur il est configuré sur 2222.
+> Vérifiez votre port SSH avec `grep Port /etc/ssh/sshd_config` avant d'activer ufw
+> pour ne pas vous verrouiller hors du serveur.
 
 ---
 
@@ -461,18 +474,12 @@ sudo crontab -e
 | `AWS_ACCESS_KEY_ID` | Clé d'accès AWS | — |
 | `AWS_SECRET_ACCESS_KEY` | Secret AWS | — |
 | `S3_BUCKET_NAME` | Bucket S3 pour les images | `distrax-uploads` |
-| `FIREBASE_CREDENTIALS_PATH` | Chemin du JSON Firebase Admin | `/var/www/distrax-api/firebase-credentials.json` |
 
 ### Frontend (`/var/www/distrax-src/.env.prod`)
 
 | Variable | Description | Exemple |
 |----------|-------------|---------|
 | `VITE_API_URL` | URL de base de l'API | `https://api.distrax.com/api/v1` |
-| `VITE_FIREBASE_API_KEY` | Clé publique Firebase | — |
-| `VITE_FIREBASE_PROJECT_ID` | ID du projet Firebase | — |
-| `VITE_FIREBASE_APP_ID` | App ID Firebase | — |
-| `VITE_FIREBASE_VAPID_KEY` | Clé VAPID pour les push | — |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Sender ID Firebase | — |
 
 ---
 

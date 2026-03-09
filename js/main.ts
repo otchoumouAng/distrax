@@ -258,23 +258,6 @@ document.addEventListener('DOMContentLoaded', () => {
     history.replaceState({ page: initialHash }, '', window.location.hash || '#home');
     _currentPageId = initialHash || 'home';
 
-    // Enregistrer le token FCM pour les notifications push (si config Firebase présente)
-    function registerPushIfConfigured() {
-        const env = (typeof import.meta !== 'undefined' && import.meta.env) ? import.meta.env : {};
-        const vapid = (env as Record<string, string>).VITE_FIREBASE_VAPID_KEY;
-        const apiKey = (env as Record<string, string>).VITE_FIREBASE_API_KEY;
-        if (!vapid || !apiKey) return;
-        const firebaseConfig = {
-            apiKey,
-            projectId: (env as Record<string, string>).VITE_FIREBASE_PROJECT_ID || '',
-            appId: (env as Record<string, string>).VITE_FIREBASE_APP_ID || '',
-            authDomain: '',
-            storageBucket: '',
-            messagingSenderId: (env as Record<string, string>).VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-        };
-        api.registerPushToken(vapid, firebaseConfig).catch(() => {});
-    }
-
     customElements.whenDefined('app-home-hero').then(() => {
         // ── Auth guard ──────────────────────────────────────────
         const targetPage = PUBLIC_PAGES.has(initialHash) ? initialHash : (
@@ -282,7 +265,6 @@ document.addEventListener('DOMContentLoaded', () => {
         );
         navigateTo(targetPage, false);
         if (api.isAuthenticated()) {
-            registerPushIfConfigured();
             sessionManager.start(); // déjà connecté → démarrer le timer
         }
 
@@ -338,7 +320,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Après connexion / inscription : démarrer la session + recharger l'exploration
     window.addEventListener('user-logged-in', () => {
         sessionManager.start(); // démarre le timer d'inactivité
-        registerPushIfConfigured();
         const expl = document.querySelector('app-exploration-section') as any;
         if (expl) {
             expl._loading = false;

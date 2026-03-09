@@ -39,5 +39,8 @@ Thumbs.db
 coverage/
 .vitest-cache/
 
+# ── Fichiers sensibles / secrets ────────────────────────────────
+docs/secret-codes.md
+
 # ── Divers ───────────────────────────────────────────────────────
 *.local
