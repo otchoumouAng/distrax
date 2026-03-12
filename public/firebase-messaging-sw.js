@@ -1,5 +1,5 @@
 /**
- * firebase-messaging-sw.js — Service Worker FCM pour Distrax
+ * firebase-messaging-sw.js — Service Worker FCM pour Dystrax
  * Généré par scripts/inject-firebase-sw.cjs à partir de .env.dev / .env.prod
  */
 
@@ -22,13 +22,13 @@ messaging.onBackgroundMessage((payload) => {
     console.log('[SW] Notification reçue en background:', payload);
     const { title, body } = payload.notification || {};
     const data = payload.data || {};
-    self.registration.showNotification(title || 'Distrax', {
+    self.registration.showNotification(title || 'Dystrax', {
         body: body || 'Vous avez une nouvelle notification.',
         icon: '/assets/icons/icon-192.png',
         badge: '/assets/icons/badge-72.png',
         data,
         vibrate: [200, 100, 200],
-        tag: data.type || 'distrax-notif',
+        tag: data.type || 'dystrax-notif',
         requireInteraction: false,
     });
 });

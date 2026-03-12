@@ -50,7 +50,7 @@ export class ExplorationSection extends HTMLElement {
                 </div>
 
                 <footer class="page-footer">
-                    <span>© 2026 Distrax</span><span class="dot">•</span>
+                    <span>© 2026 Dystrax</span><span class="dot">•</span>
                     <span>Fait avec <i class="material-icons-round heart">favorite</i></span><span class="dot">•</span>
                     <a href="#">Confidentialité</a>
                 </footer>
@@ -145,7 +145,10 @@ export class ExplorationSection extends HTMLElement {
             card.setAttribute('desire-id', d.id); // requis par getAttribute('desire-id') dans DesireCard
             card.dataset.authorId = d.author_id || ''; // pour que desire-view l'inclue
 
-            // Si la carte appartient à l'utilisateur connecté : mode owner
+            if (d.is_boosted) {
+                card.setAttribute('is-boosted', '');
+            }
+
             if (myUserId && d.author_id && myUserId === d.author_id) {
                 card.setAttribute('mode', 'owner');
             }
@@ -249,7 +252,7 @@ export class ExplorationSection extends HTMLElement {
         try {
             const { api } = await import('../../api.js');
             if (api.isAuthenticated()) {
-                const cached = JSON.parse(localStorage.getItem('distrax-user') || 'null');
+                const cached = JSON.parse(localStorage.getItem('dystrax-user') || 'null');
                 myUserId = cached?.id || null;
                 if (!myUserId) {
                     const me = await api.getMe();
@@ -302,7 +305,7 @@ export class ExplorationSection extends HTMLElement {
     }
 
     /**
-     * Charge les envies rejointes et met les cartes correspondantes en mode='joined'.
+     * Charge les envies rejointes et met les cartes correspondantes en mode='pending'.
      * Appelé de manière asynchrone après renderDesires() pour ne pas bloquer l'affichage.
      */
     async _markJoinedDesires(api, myUserId) {
@@ -321,7 +324,7 @@ export class ExplorationSection extends HTMLElement {
                 // Ne pas écraser le mode 'owner'
                 if (card.getAttribute('mode') === 'owner') return;
                 if (joinedIds.has(cardId)) {
-                    card.setAttribute('mode', 'joined');
+                    card.setAttribute('mode', 'pending');
                 }
             });
         } catch (_) { /* silencieux, pas critique */ }

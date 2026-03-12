@@ -25,7 +25,7 @@ export class RegisterPage extends HTMLElement {
                             <i class="material-icons-round" style="font-size: 36px;">interests</i>
                         </div>
                         <h1 style="font-size: 28px; font-weight: 800; color: var(--text-main); margin-bottom: 8px;">Créer un compte</h1>
-                        <p style="color: var(--text-muted); font-size: 15px;">Rejoignez l'aventure Distrax !</p>
+                        <p style="color: var(--text-muted); font-size: 15px;">Rejoignez l'aventure Dystrax !</p>
                     </div>
 
                     <div class="social-login" style="margin-bottom: 24px;">

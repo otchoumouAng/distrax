@@ -14,9 +14,6 @@ if (fs.existsSync(envPath)) {
     if (m && m[1].toLowerCase() === 'prod') mode = 'prod';
 }
 
-// Générer le SW Firebase avec la config du bon environnement
-require('./inject-firebase-sw.cjs');
-
 const args = process.argv.slice(2);
 const isBuild = args[0] === 'build';
 const viteCmd = isBuild ? ['vite', 'build', '--mode', mode] : ['vite', '--mode', mode, ...args];

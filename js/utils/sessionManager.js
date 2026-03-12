@@ -30,7 +30,7 @@ async function _expire() {
         if (!api.isAuthenticated()) return; // déjà déconnecté
 
         // Récupérer le téléphone avant de supprimer les données
-        const user  = JSON.parse(localStorage.getItem('distrax-user') || 'null');
+        const user  = JSON.parse(localStorage.getItem('dystrax-user') || 'null');
         const phone = user?.phone || user?.username || '';
 
         api.logout();

@@ -2,7 +2,7 @@ import { escapeHtml, safeUrl } from '../../utils/escapeHtml.js';
 
 export class DesireCard extends HTMLElement {
     static get observedAttributes() {
-        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost'];
+        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted'];
     }
 
     connectedCallback() {
@@ -50,56 +50,65 @@ export class DesireCard extends HTMLElement {
         if (dateLower.includes('maintenant')) dateIcon = 'flash_on';
         if (dateLower.includes('après-midi') || dateLower.includes('heure')) dateIcon = 'schedule';
 
-        const imageHtml = firstImageUrl ? `<div class="card-image" style="background-image: url('${escapeHtml(firstImageUrl)}'); width: 100%; height: 160px; background-size: cover; background-position: center; border-radius: 20px 20px 0 0; margin-bottom: 12px;"></div>` : '';
+        const imageHtml = firstImageUrl ? `<div class="card-image" style="background-image: url('${escapeHtml(firstImageUrl)}');"></div>` : '';
 
         const mode = this.getAttribute('mode') || 'default';
         const desireId = this.getAttribute('desire-id');
 
         const hasActiveBoost = this.hasAttribute('has-active-boost');
+        const isBoosted = this.hasAttribute('is-boosted');
+
+        const sponsoredBadgeHtml = isBoosted ? `<span class="sponsored-badge"><i class="material-icons-round">campaign</i> Sponsorisé</span>` : '';
 
         let cardActionsHtml = '';
         if (mode === 'profile') {
-            // Mode créateur (dans le profil) — voir + éditer + booster
+            // Mode créateur dans le profil — icônes compactes + boost
             let boostBtnHtml = '';
             if (this.hasAttribute('show-boost')) {
                 if (hasActiveBoost) {
-                    boostBtnHtml = `<button class="boost-active-btn"
-                        style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none;
-                               padding:8px 14px; border-radius:12px; cursor:pointer;
-                               display:flex; align-items:center; gap:6px;
-                               font-size:13px; font-weight:600;">
-                        <i class="material-icons-round" style="font-size:16px;">rocket_launch</i> Boost en cours
+                    boostBtnHtml = `<button class="boost-active-btn ca-btn ca-btn--boost" style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border-color:transparent;">
+                        <i class="material-icons-round">rocket_launch</i> Boost en cours
                     </button>`;
                 } else {
-                    boostBtnHtml = `<button class="boost-inline-btn"><i class="material-icons-round">rocket_launch</i> Booster</button>`;
+                    boostBtnHtml = `<button class="boost-inline-btn ca-btn ca-btn--boost"><i class="material-icons-round">rocket_launch</i> Booster</button>`;
                 }
             }
             cardActionsHtml = `
-                <button class="view-btn icon-only" title="Voir l'annonce" style="background: transparent; color: var(--text-main); border: 1px solid var(--border-light); padding: 8px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;"><i class="material-icons-round">visibility</i></button>
-                <button class="edit-btn icon-only" title="Éditer l'annonce" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-light); padding: 8px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;"><i class="material-icons-round" style="font-size: 18px;">edit</i></button>
+                <button class="view-btn ca-btn ca-btn--icon" title="Voir"><i class="material-icons-round">visibility</i></button>
+                <button class="edit-btn ca-btn ca-btn--edit" title="Éditer"><i class="material-icons-round">edit</i></button>
                 ${boostBtnHtml}
             `;
         } else if (mode === 'owner') {
-            // Mode propriétaire dans l'exploration — seulement l'œil
+            // Ma propre envie dans l'exploration
             cardActionsHtml = `
-                <button class="view-btn" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-light); padding: 8px 16px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;">
-                    <i class="material-icons-round" style="font-size: 18px;">visibility</i> Voir
+                <button class="view-btn ca-btn ca-btn--view">
+                    <i class="material-icons-round">visibility</i> Voir
+                </button>
+            `;
+        } else if (mode === 'pending') {
+            // Demande déjà envoyée — ouvre les détails au clic
+            cardActionsHtml = `
+                <button class="view-btn ca-btn ca-btn--pending">
+                    <i class="material-icons-round">hourglass_top</i> Demande en cours
                 </button>
             `;
         } else if (mode === 'joined') {
-            // Mode envie rejointe (dans le profil) — voir
+            // Envie rejointe dans le profil — Voir + Annuler
             cardActionsHtml = `
-                <button class="view-btn" style="background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-light); padding: 8px 16px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;">
-                    <i class="material-icons-round" style="font-size: 18px;">visibility</i> Voir
+                <button class="view-btn ca-btn ca-btn--view">
+                    <i class="material-icons-round">visibility</i> Voir
                 </button>
-                <button class="leave-btn" style="background: transparent; color: #ef4444; border: 1px solid #ef4444; padding: 8px 16px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;">
-                    <i class="material-icons-round" style="font-size: 18px;">logout</i> Quitter
+                <button class="leave-btn ca-btn ca-btn--cancel">
+                    <i class="material-icons-round">close</i> Annuler
                 </button>
             `;
         } else {
+            // Mode par défaut (exploration/résultats)
             cardActionsHtml = `
-                <button class="join-btn">${btnText}</button>
-                ${this.hasAttribute('show-boost') ? '<button class="boost-inline-btn"><i class="material-icons-round">rocket_launch</i> Booster</button>' : ''}
+                <button class="view-btn ca-btn ca-btn--view">
+                    <i class="material-icons-round">visibility</i> Voir
+                </button>
+                ${this.hasAttribute('show-boost') ? '<button class="boost-inline-btn ca-btn ca-btn--boost"><i class="material-icons-round">rocket_launch</i> Booster</button>' : ''}
             `;
         }
 
@@ -107,6 +116,7 @@ export class DesireCard extends HTMLElement {
         this.innerHTML = `
             <article class="desire-card card-${themeSafe}">
                 ${imageHtml}
+                ${sponsoredBadgeHtml}
                 <div class="card-header">
                     <div class="user-info">
                         <img src="${avatar}" alt="${author}" class="user-avatar">

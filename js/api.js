@@ -1,9 +1,9 @@
 /**
- * api.js — Client HTTP centralisé pour l'API Distrax (FastAPI)
+ * api.js — Client HTTP centralisé pour l'API Dystrax (FastAPI)
  * Base URL : http://127.0.0.1:8000/api/v1
  *
  * Gestion du token JWT :
- *   - Stocké dans localStorage sous la clé "distrax-token"
+ *   - Stocké dans localStorage sous la clé "dystrax-token"
  *   - Injecté automatiquement dans Authorization: Bearer <token>
  */
 
@@ -13,16 +13,16 @@ const BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && impor
 // ── Helpers internes ─────────────────────────────────────────────
 
 function getToken() {
-    return localStorage.getItem('distrax-token');
+    return localStorage.getItem('dystrax-token');
 }
 
 function setToken(token) {
-    localStorage.setItem('distrax-token', token);
+    localStorage.setItem('dystrax-token', token);
 }
 
 function removeToken() {
-    localStorage.removeItem('distrax-token');
-    localStorage.removeItem('distrax-user');
+    localStorage.removeItem('dystrax-token');
+    localStorage.removeItem('dystrax-user');
 }
 
 function isAuthenticated() {
@@ -99,7 +99,6 @@ export const api = {
 
     /** Déconnexion : supprime le token du localStorage */
     logout() {
-        this.unregisterPushToken().catch(() => {});
         removeToken();
     },
 
@@ -115,7 +114,7 @@ export const api = {
             headers: buildHeaders(),
         });
         const user = await handleResponse(res);
-        if (user) localStorage.setItem('distrax-user', JSON.stringify(user));
+        if (user) localStorage.setItem('dystrax-user', JSON.stringify(user));
         return user;
     },
 

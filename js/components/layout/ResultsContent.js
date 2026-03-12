@@ -188,7 +188,7 @@ export class ResultsContent extends HTMLElement {
 
             // Toujours relire l'ID depuis localStorage (jamais mettre en cache entre sessions)
             if (this._myUserId === null && api.isAuthenticated()) {
-                const cached = JSON.parse(localStorage.getItem('distrax-user') || 'null');
+                const cached = JSON.parse(localStorage.getItem('dystrax-user') || 'null');
                 this._myUserId = cached?.id || null;
                 if (!this._myUserId) {
                     const me = await api.getMe();

@@ -55,6 +55,18 @@ export class ProfilePage extends HTMLElement {
                         </button>
                     </div>
 
+                    <!-- CTA création d'envie -->
+                    <button class="profile-create-cta" id="profileCreateBtn">
+                        <div class="profile-create-cta-icon">
+                            <i class="material-icons-round">add</i>
+                        </div>
+                        <div class="profile-create-cta-text">
+                            <span>Proposer une nouvelle envie</span>
+                            <small>Sport, sortie, découverte...</small>
+                        </div>
+                        <i class="material-icons-round profile-create-cta-arrow">arrow_forward</i>
+                    </button>
+
                     <!-- Section "Mes envies créées" -->
                     <div id="sectionCreated">
                         <h3 class="profile-section-title" style="margin-bottom: 12px;">Mes envies en cours</h3>
@@ -106,6 +118,14 @@ export class ProfilePage extends HTMLElement {
         if (backBtn) {
             backBtn.addEventListener('click', () => {
                 this.dispatchEvent(new CustomEvent('navigate-back', { bubbles: true, composed: true }));
+            });
+        }
+
+        // CTA création d'envie
+        const createBtn = this.querySelector('#profileCreateBtn');
+        if (createBtn) {
+            createBtn.addEventListener('click', () => {
+                this.dispatchEvent(new CustomEvent('navigate-creation', { bubbles: true, composed: true }));
             });
         }
 
@@ -185,10 +205,10 @@ export class ProfilePage extends HTMLElement {
 
                     // Mise à jour visuelle locale
                     avatarImage.src = url;
-                    const user = JSON.parse(localStorage.getItem('distrax-user') || '{}');
+                    const user = JSON.parse(localStorage.getItem('dystrax-user') || '{}');
                     if (user && Object.keys(user).length > 0) {
                         user.avatar_url = url;
-                        localStorage.setItem('distrax-user', JSON.stringify(user));
+                        localStorage.setItem('dystrax-user', JSON.stringify(user));
                     }
                 } catch (err) {
                     console.error('Avatar upload failed', err);
@@ -293,6 +313,7 @@ export class ProfilePage extends HTMLElement {
                                 description="${escapeHtml(desire.description || '')}"
                                 show-boost
                                 ${hasActiveBoost ? 'has-active-boost' : ''}
+                                ${hasActiveBoost ? 'is-boosted' : ''}
                             ></desire-card>
                         `;
                     });

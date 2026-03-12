@@ -49,7 +49,7 @@ describe('safeUrl', () => {
 
     it('allows https URLs', () => {
         expect(safeUrl('https://example.com')).toBe('https://example.com');
-        expect(safeUrl('  https://api.distrax.com/path  ')).toBe('https://api.distrax.com/path');
+        expect(safeUrl('  https://api.dystrax.com/path  ')).toBe('https://api.dystrax.com/path');
     });
 
     it('allows http URLs', () => {

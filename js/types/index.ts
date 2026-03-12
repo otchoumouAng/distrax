@@ -1,4 +1,4 @@
-// Types pour l'ensemble de l'application Distrax
+// Types pour l'ensemble de l'application Dystrax
 
 export type AppTheme = 'light' | 'dark';
 

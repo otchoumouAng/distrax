@@ -14,7 +14,7 @@ class Store {
         this._state = { ...initialState };
 
         // Chargement du thème sauvegardé
-        const savedTheme = localStorage.getItem('distrax-theme');
+        const savedTheme = localStorage.getItem('dystrax-theme');
         if (savedTheme === 'light' || savedTheme === 'dark') {
             this._state.theme = savedTheme;
         }
@@ -36,7 +36,7 @@ class Store {
 
         // Persistance locale pour le thème
         if (key === 'theme') {
-            localStorage.setItem('distrax-theme', value as string);
+            localStorage.setItem('dystrax-theme', value as string);
         }
 
         this.notify(key as string, value);

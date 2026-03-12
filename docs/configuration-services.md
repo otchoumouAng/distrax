@@ -1,7 +1,7 @@
-# Configuration des services externes — Distrax
+# Configuration des services externes — Dystrax
 
 > Ce guide explique comment obtenir les clés pour chaque service externe
-> utilisé par Distrax et où les renseigner sur le serveur.
+> utilisé par Dystrax et où les renseigner sur le serveur.
 
 ---
 
@@ -21,7 +21,7 @@ Utilisé pour la connexion "Se connecter avec Google".
 
 1. Aller sur [https://console.cloud.google.com](https://console.cloud.google.com)
 2. Cliquer sur **Sélectionner un projet** → **Nouveau projet**
-3. Nom : `Distrax` → **Créer**
+3. Nom : `Dystrax` → **Créer**
 
 ### 1.2 Activer l'API Google OAuth
 
@@ -32,16 +32,16 @@ Utilisé pour la connexion "Se connecter avec Google".
 
 1. **APIs et services** → **Identifiants** → **+ Créer des identifiants** → **ID client OAuth**
 2. Type d'application : **Application Web**
-3. Nom : `Distrax Web`
+3. Nom : `Dystrax Web`
 4. **Origines JavaScript autorisées** → Ajouter :
    ```
-   https://distrax.com
-   https://www.distrax.com
+   https://dystrax.com
+   https://www.dystrax.com
    ```
 5. **URI de redirection autorisés** → Ajouter :
    ```
-   https://distrax.com/auth/google/callback
-   https://api.distrax.com/api/v1/auth/google/callback
+   https://dystrax.com/auth/google/callback
+   https://api.dystrax.com/api/v1/auth/google/callback
    ```
 6. Cliquer **Créer**
 
@@ -54,7 +54,7 @@ Une fenêtre affiche :
 ### 1.5 Renseigner sur le serveur
 
 ```bash
-nano /var/www/distrax-api/.env.prod
+nano /var/www/dystrax-api/.env.prod
 ```
 
 ```ini
@@ -77,7 +77,7 @@ Si vous n'avez pas de compte : [https://aws.amazon.com](https://aws.amazon.com) 
 1. Aller sur [https://s3.console.aws.amazon.com](https://s3.console.aws.amazon.com)
 2. Cliquer **Créer un compartiment (bucket)**
 3. Remplir :
-   - **Nom** : `distrax-uploads` *(doit être unique globalement)*
+   - **Nom** : `dystrax-uploads` *(doit être unique globalement)*
    - **Région** : choisir la plus proche de vos utilisateurs  
      → Pour la Côte d'Ivoire : `eu-west-1` (Irlande) ou `af-south-1` (Afrique du Sud)
 4. **Décocher** "Bloquer tout accès public" *(les images doivent être lisibles)*
@@ -97,22 +97,46 @@ Si vous n'avez pas de compte : [https://aws.amazon.com](https://aws.amazon.com) 
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::distrax-uploads/*"
+      "Resource": "arn:aws:s3:::dystrax-uploads/*"
     }
   ]
 }
 ```
 
-### 2.4 Créer un utilisateur IAM dédié
+### 2.4 Configurer le CORS du bucket
+
+Sans cette étape, l'upload direct depuis le navigateur sera bloqué.
+
+1. Ouvrir le bucket → onglet **Autorisations** → **Partage des ressources entre origines (CORS)**
+2. Cliquer **Modifier** et coller :
+
+```json
+[
+    {
+        "AllowedHeaders": ["*"],
+        "AllowedMethods": ["PUT", "GET"],
+        "AllowedOrigins": [
+            "http://localhost:3001",
+            "https://dystrax.com",
+            "https://www.dystrax.com"
+        ],
+        "ExposeHeaders": ["ETag"]
+    }
+]
+```
+
+> Adaptez `AllowedOrigins` selon vos domaines (dev local + production).
+
+### 2.5 Créer un utilisateur IAM dédié
 
 1. Aller sur [https://console.aws.amazon.com/iam](https://console.aws.amazon.com/iam)
 2. **Utilisateurs** → **Ajouter des utilisateurs**
-3. Nom : `distrax-api-user`
+3. Nom : `dystrax-api-user`
 4. **Accès programmatique** uniquement (pas de console)
 5. **Attacher des politiques directement** → rechercher `AmazonS3FullAccess` → sélectionner
 6. **Créer l'utilisateur**
 
-### 2.5 Générer les clés d'accès
+### 2.6 Générer les clés d'accès
 
 1. Cliquer sur l'utilisateur créé → onglet **Informations d'identification de sécurité**
 2. **Créer une clé d'accès** → **Application s'exécutant en dehors d'AWS**
@@ -120,17 +144,17 @@ Si vous n'avez pas de compte : [https://aws.amazon.com](https://aws.amazon.com) 
    - **Access key ID** → `AWS_ACCESS_KEY_ID`
    - **Secret access key** → `AWS_SECRET_ACCESS_KEY` *(visible une seule fois !)*
 
-### 2.6 Renseigner sur le serveur
+### 2.7 Renseigner sur le serveur
 
 ```bash
-nano /var/www/distrax-api/.env.prod
+nano /var/www/dystrax-api/.env.prod
 ```
 
 ```ini
 AWS_REGION=eu-west-1
 AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-S3_BUCKET_NAME=distrax-uploads
+S3_BUCKET_NAME=dystrax-uploads
 ```
 
 ---
@@ -140,17 +164,17 @@ S3_BUCKET_NAME=distrax-uploads
 Après avoir mis à jour `.env.prod` sur le serveur, redémarrer l'API :
 
 ```bash
-sudo systemctl restart distrax-api
-sudo systemctl status distrax-api
+sudo systemctl restart dystrax-api
+sudo systemctl status dystrax-api
 ```
 
 Et rebuilder le frontend si les clés Firebase ont changé :
 
 ```bash
-cd /var/www/distrax-src
+cd /var/www/dystrax-src
 npm run build:prod
-sudo cp -r dist/. /var/www/distrax/
-sudo chown -R www-data:www-data /var/www/distrax
+sudo cp -r dist/. /var/www/dystrax/
+sudo chown -R www-data:www-data /var/www/dystrax
 ```
 
 ---

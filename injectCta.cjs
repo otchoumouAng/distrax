@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const dir = 'e:\\Exo\\Distrax';
+const dir = 'e:\\Exo\\Dystrax';
 const htmlPath = path.join(dir, 'index.html');
 const cssPath = path.join(dir, 'css', 'components.css');
 

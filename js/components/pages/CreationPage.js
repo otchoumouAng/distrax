@@ -7,6 +7,11 @@ export class CreationPage extends HTMLElement {
                 .form-label { font-weight: 600; color: var(--text-main); font-size: 15px; }
                 .form-input, .form-select, .form-textarea { width: 100%; padding: 16px; border-radius: 16px; border: 1px solid var(--border-light); color: var(--text-main); font-size: 16px; font-family: inherit; background: var(--bg-card); transition: all 0.2s; }
                 .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent); }
+                .form-input.field-error, .form-select.field-error { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
+                .field-error-msg { font-size: 12px; color: #ef4444; margin-top: 4px; display: none; }
+                .field-error-msg.visible { display: block; }
+                .required-label::after { content: ' *'; color: #ef4444; font-weight: 700; }
+                .image-upload.field-error { border-color: #ef4444; background: rgba(239,68,68,0.04); }
                 .form-select { appearance: none; background-image: url('data:image/svg+xml;utf8,<svg fill="%2371717a" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>'); background-repeat: no-repeat; background-position-x: 95%; background-position-y: 50%; }
                 
                 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -40,38 +45,44 @@ export class CreationPage extends HTMLElement {
                     <form id="creationForm" class="creation-form">
                         
                         <div class="form-group">
-                            <label class="form-label">Titre de votre envie</label>
-                            <input type="text" class="form-input" placeholder="Ex: Jouer au tennis à 4..." required>
+                            <label class="form-label required-label" for="titleInput">Titre de votre envie</label>
+                            <input id="titleInput" type="text" class="form-input" placeholder="Ex: Jouer au tennis à 4..." required>
+                            <span class="field-error-msg" id="titleError">Le titre est requis.</span>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Catégorie</label>
+                            <label class="form-label required-label">Catégorie</label>
                             <div class="filters-container" style="flex-wrap: wrap;" id="categorySelector">
                                 <span id="categoriesLoading" style="color: var(--text-light); font-size: 14px; padding: 8px;">Chargement...</span>
                             </div>
+                            <span class="field-error-msg" id="categoryError">Veuillez sélectionner une catégorie.</span>
                         </div>
 
                         <div class="form-row">
                             <div class="form-group">
-                                <label class="form-label">Date et heure</label>
-                                <input type="datetime-local" class="form-input" required>
+                                <label class="form-label required-label" for="dateInput">Date et heure</label>
+                                <input id="dateInput" type="datetime-local" class="form-input" required>
+                                <span class="field-error-msg" id="dateError">La date est requise.</span>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Nombre de personnes</label>
-                                <input type="number" class="form-input" min="1" placeholder="Ex: 4" required>
+                                <label class="form-label required-label" for="spotsInput">Nombre de personnes</label>
+                                <input id="spotsInput" type="number" class="form-input" min="1" placeholder="Ex: 4" required>
+                                <span class="field-error-msg" id="spotsError">Indiquez le nombre de participants.</span>
                             </div>
                         </div>
 
                         <div class="form-row">
                             <div class="form-group">
-                                <label class="form-label">Commune</label>
+                                <label class="form-label required-label" for="communeSelect">Commune</label>
                                 <select class="form-select" id="communeSelect" required>
                                     <option value="" disabled selected>Chargement...</option>
                                 </select>
+                                <span class="field-error-msg" id="communeError">Veuillez choisir une commune.</span>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">Adresse / Lieu exact</label>
-                                <input type="text" class="form-input" placeholder="Ex: Parc sportif, rue 12..." required>
+                                <label class="form-label required-label" for="addressInput">Adresse / Lieu exact</label>
+                                <input id="addressInput" type="text" class="form-input" placeholder="Ex: Parc sportif, rue 12..." required>
+                                <span class="field-error-msg" id="addressError">L'adresse est requise.</span>
                             </div>
                         </div>
 
@@ -119,13 +130,14 @@ export class CreationPage extends HTMLElement {
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Image Principale</label>
-                            <div class="image-upload" title="Ajouter l'image principale">
+                            <label class="form-label required-label">Image principale</label>
+                            <div class="image-upload" id="mainImageUpload" title="Ajouter l'image principale">
                                 <i class="material-icons-round upload-icon">add_photo_alternate</i>
                                 <span style="font-weight: 600;">Ajouter une photo de couverture</span>
                                 <span style="font-size: 12px;">Format paysage idéal</span>
                                 <input type="file" accept="image/jpeg, image/png, image/webp" class="file-input" style="display: none;">
                             </div>
+                            <span class="field-error-msg" id="imageError">Une image de couverture est requise.</span>
                         </div>
 
                         <div class="form-group">
@@ -197,7 +209,7 @@ export class CreationPage extends HTMLElement {
             const paidSubTypeRadios = form.querySelectorAll('input[name="paid_sub_type"]');
             const priceInputArea = this.querySelector('#priceInputArea');
             const amountInput = this.querySelector('#amountInput');
-            const spotsInput = this.querySelector('input[type="number"][min="1"]'); // Input nombre de personnes
+            const spotsInput = this.querySelector('#spotsInput'); // Input nombre de personnes
             const theyPayLabel = this.querySelector('#theyPayLabel');
 
             // Mise à jour du label "L'intéressée" ou "Les intéressés"
@@ -325,23 +337,71 @@ export class CreationPage extends HTMLElement {
                 const btn = form.querySelector('button[type="submit"]');
                 const originalHtml = btn.innerHTML;
 
-                // ── Collecte des données ────────────────────────────────
-                const inputs = form.querySelectorAll('input, select, textarea');
-                const titleInput = form.querySelector('input[type="text"][placeholder*="tennis"], input[type="text"][placeholder*="Jouer"]')
-                    || form.querySelectorAll('input.form-input')[0];
-                const dateInput = form.querySelector('input[type="datetime-local"]');
-                const spotsInput = form.querySelector('input[type="number"][min="1"]');
-                const communeSelect = form.querySelector('#communeSelect') || form.querySelector('select.form-select');
-                const addressInput = form.querySelector('input[placeholder*="Parc"], input[placeholder*="adresse"], input[placeholder*="Lieu"]')
-                    || form.querySelectorAll('input.form-input')[3];
-                const descTextarea = form.querySelector('textarea');
+                // ── Collecte des champs ─────────────────────────────────
+                const titleInput    = form.querySelector('#titleInput');
+                const dateInput     = form.querySelector('#dateInput');
+                const spotsInput    = form.querySelector('#spotsInput');
+                const communeSelect = form.querySelector('#communeSelect');
+                const addressInput  = form.querySelector('#addressInput');
+                const descTextarea  = form.querySelector('textarea');
                 const priceTypeRadio = form.querySelector('input[name="price_type"]:checked');
-                const paidSubRadio = form.querySelector('input[name="paid_sub_type"]:checked');
-                const amountInput = form.querySelector('#amountInput');
+                const paidSubRadio   = form.querySelector('input[name="paid_sub_type"]:checked');
+                const amountInput    = form.querySelector('#amountInput');
+                const activePill     = this.querySelector('#categorySelector filter-pill[active], #categorySelector filter-pill.active');
+                const category       = activePill?.dataset?.slug || null;
 
-                // Catégorie sélectionnée via filter-pills (data-slug = slug API)
-                const activePill = this.querySelector('#categorySelector filter-pill[active], #categorySelector filter-pill.active');
-                const category = activePill?.dataset?.slug || 'decouverte';
+                // ── Validation ─────────────────────────────────────────
+                const clearError = (input, errorId) => {
+                    input?.classList.remove('field-error');
+                    const msg = form.querySelector(`#${errorId}`) || this.querySelector(`#${errorId}`);
+                    if (msg) msg.classList.remove('visible');
+                };
+                const showError = (input, errorId) => {
+                    input?.classList.add('field-error');
+                    const msg = form.querySelector(`#${errorId}`) || this.querySelector(`#${errorId}`);
+                    if (msg) msg.classList.add('visible');
+                    return false;
+                };
+
+                let valid = true;
+
+                // Titre
+                clearError(titleInput, 'titleError');
+                if (!titleInput?.value?.trim()) { showError(titleInput, 'titleError'); valid = false; }
+
+                // Catégorie
+                const categorySelector = this.querySelector('#categorySelector');
+                clearError(categorySelector, 'categoryError');
+                if (!category) { showError(categorySelector, 'categoryError'); valid = false; }
+
+                // Date
+                clearError(dateInput, 'dateError');
+                if (!dateInput?.value) { showError(dateInput, 'dateError'); valid = false; }
+
+                // Spots
+                clearError(spotsInput, 'spotsError');
+                if (!spotsInput?.value || parseInt(spotsInput.value) < 1) { showError(spotsInput, 'spotsError'); valid = false; }
+
+                // Commune
+                clearError(communeSelect, 'communeError');
+                if (!communeSelect?.value) { showError(communeSelect, 'communeError'); valid = false; }
+
+                // Adresse
+                clearError(addressInput, 'addressError');
+                if (!addressInput?.value?.trim()) { showError(addressInput, 'addressError'); valid = false; }
+
+                // Image principale (skip in edit mode if existing images present)
+                const mainUpload = form.querySelector('#mainImageUpload') || form.querySelector('.image-upload:not(.multiple-image-upload)');
+                clearError(mainUpload, 'imageError');
+                const hasExisting = this._editMode && this._existingImages && this._existingImages.length > 0;
+                if (selectedFiles.size === 0 && !hasExisting) { showError(mainUpload, 'imageError'); valid = false; }
+
+                if (!valid) {
+                    // Scroller jusqu'au premier champ en erreur
+                    const firstErr = form.querySelector('.field-error, .image-upload.field-error');
+                    firstErr?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return;
+                }
 
                 btn.disabled = true;
                 btn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite;">autorenew</i> Envoi des images...';
@@ -351,38 +411,38 @@ export class CreationPage extends HTMLElement {
                     if (!api.isAuthenticated()) throw new Error('Connectez-vous pour publier une envie');
 
                     // 1. Upload des images vers S3
-                    const uploadedImageUrls = [];
-                    // Image principale
+                    const mainImageUrls = [];
+                    const additionalImageUrls = [];
                     for (const [input, file] of selectedFiles.entries()) {
                         try {
                             const url = await api.uploadToS3(file);
-                            uploadedImageUrls.push(url);
+                            mainImageUrls.push(url);
                         } catch (imgErr) {
                             console.error('Erreur upload image principale', file.name, imgErr);
                             throw new Error(`Erreur image principale ${file.name}: ${imgErr.message}`);
                         }
                     }
-                    // Images supplémentaires
                     for (const file of additionalFiles) {
                         try {
                             const url = await api.uploadToS3(file);
-                            uploadedImageUrls.push(url);
+                            additionalImageUrls.push(url);
                         } catch (imgErr) {
                             console.error('Erreur upload image supp', file.name, imgErr);
                             throw new Error(`Erreur image suppl ${file.name}: ${imgErr.message}`);
                         }
                     }
+                    const uploadedImageUrls = [...mainImageUrls, ...additionalImageUrls];
 
                     btn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite;">autorenew</i> Publication...';
 
                     // 2. Création du payload
                     const payload = {
-                        title: titleInput?.value?.trim() || 'Sans titre',
+                        title: titleInput.value.trim(),
                         category,
-                        commune: communeSelect?.value || 'Cocody',
-                        address: addressInput?.value?.trim() || null,
-                        event_date: dateInput?.value ? new Date(dateInput.value).toISOString() : new Date().toISOString(),
-                        max_spots: parseInt(spotsInput?.value) || 1,
+                        commune: communeSelect.value,
+                        address: addressInput.value.trim(),
+                        event_date: new Date(dateInput.value).toISOString(),
+                        max_spots: parseInt(spotsInput.value),
                         price_type: priceTypeRadio?.value || 'free',
                         pay_mode: paidSubRadio?.value || null,
                         price_amount: amountInput?.value ? parseInt(amountInput.value) : null,
@@ -392,10 +452,14 @@ export class CreationPage extends HTMLElement {
 
                     if (this._editMode && this._editDesireId) {
                         btn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite;">autorenew</i> Mise à jour...';
-                        if (uploadedImageUrls.length > 0) {
-                            payload.images = uploadedImageUrls;
+                        const existing = this._existingImages || [];
+                        const finalMain = mainImageUrls.length > 0 ? mainImageUrls : existing.slice(0, 1);
+                        const finalAdditional = additionalImageUrls.length > 0 ? additionalImageUrls : existing.slice(1);
+                        const finalImages = [...finalMain, ...finalAdditional];
+                        if (finalImages.length > 0) {
+                            payload.images = finalImages;
                         } else {
-                            delete payload.images; // Garder les images existantes en backend si aucune nouvelle uploadée
+                            delete payload.images;
                         }
                         await api.updateDesire(this._editDesireId, payload);
                         btn.style.background = '#10b981';
@@ -493,24 +557,48 @@ export class CreationPage extends HTMLElement {
         const desireId = data.desireId;
         if (!desireId) return;
 
+        const editToken = Symbol();
+        this._editToken = editToken;
         this._editMode = true;
         this._editDesireId = desireId;
+
+        const pageContent = this.querySelector('.page-content');
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.className = 'edit-loading-overlay';
+        loadingOverlay.style.cssText = [
+            'position:absolute', 'inset:0',
+            'background:var(--bg-main,#fff)',
+            'display:flex', 'align-items:center', 'justify-content:center',
+            'z-index:20'
+        ].join(';');
+        loadingOverlay.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--text-light);">
+                <i class="material-icons-round" style="font-size:40px;animation:spin 1s linear infinite;color:var(--primary);">autorenew</i>
+                <span style="font-size:14px;font-weight:500;">Chargement de l'annonce...</span>
+            </div>`;
+        if (pageContent) {
+            pageContent.style.position = 'relative';
+            pageContent.appendChild(loadingOverlay);
+        }
 
         try {
             const { api } = await import('../../api.js');
             const desire = await api.getDesire(desireId);
 
-            const form = this.querySelector('#creationForm');
-            if (!form) return;
+            if (this._editToken !== editToken) {
+                loadingOverlay.remove();
+                return;
+            }
 
-            // Title
-            const titleInput = form.querySelector('input[type="text"].form-input');
+            const form = this.querySelector('#creationForm');
+            if (!form) { loadingOverlay.remove(); return; }
+
+            const titleInput = form.querySelector('#titleInput');
             if (titleInput) titleInput.value = desire.title || '';
 
-            // Category — match by data-slug attribute
             const pills = this.querySelectorAll('#categorySelector filter-pill');
             pills.forEach(p => {
-                if (p.classList.contains('active')) p.classList.remove('active');
+                p.classList.remove('active');
                 p.removeAttribute('active');
             });
             if (desire.category) {
@@ -518,30 +606,24 @@ export class CreationPage extends HTMLElement {
                 if (targetPill) targetPill.setAttribute('active', 'true');
             }
 
-            // Date
             const dateInput = form.querySelector('input[type="datetime-local"]');
             if (dateInput && desire.event_date) {
                 const d = new Date(desire.event_date);
                 dateInput.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
             }
 
-            // Max spots
-            const spotsInput = form.querySelector('input[type="number"][min="1"]');
+            const spotsInput = form.querySelector('#spotsInput');
             if (spotsInput) spotsInput.value = desire.max_spots || '';
 
-            // Commune
-            const communeSelect = form.querySelector('#communeSelect') || form.querySelector('select.form-select');
+            const communeSelect = form.querySelector('#communeSelect');
             if (communeSelect && desire.commune) communeSelect.value = desire.commune;
 
-            // Address
-            const addressInput = form.querySelectorAll('input[type="text"].form-input')[1] || form.querySelector('input[placeholder*="adresse"]');
+            const addressInput = form.querySelector('#addressInput');
             if (addressInput && desire.address) addressInput.value = desire.address;
 
-            // Description
             const descTextarea = form.querySelector('textarea');
             if (descTextarea && desire.description) descTextarea.value = desire.description;
 
-            // Price type
             const priceRadios = form.querySelectorAll('input[name="price_type"]');
             priceRadios.forEach(r => {
                 if (r.value === desire.price_type) r.checked = true;
@@ -557,12 +639,43 @@ export class CreationPage extends HTMLElement {
                 if (amountInput) amountInput.value = desire.price_amount || '';
             }
 
-            // Button label
+            // Existing images
+            this._existingImages = desire.images || [];
+            if (this._existingImages.length > 0) {
+                const mainImageContainer = form.querySelector('.image-upload:not(.multiple-image-upload)');
+                if (mainImageContainer) {
+                    mainImageContainer.style.backgroundImage = `url('${this._existingImages[0]}')`;
+                    mainImageContainer.style.backgroundSize = 'cover';
+                    mainImageContainer.style.backgroundPosition = 'center';
+                    mainImageContainer.style.minHeight = '160px';
+                    Array.from(mainImageContainer.children).forEach(el => {
+                        if (el.tagName !== 'INPUT') el.style.display = 'none';
+                    });
+                }
+
+                if (this._existingImages.length > 1) {
+                    const preview = form.querySelector('#multipleImagesPreview');
+                    if (preview) {
+                        preview.innerHTML = '';
+                        this._existingImages.slice(1).forEach(url => {
+                            const div = document.createElement('div');
+                            div.style.cssText = 'min-width:80px;height:80px;border-radius:12px;background-size:cover;background-position:center;flex-shrink:0;';
+                            div.style.backgroundImage = `url('${url}')`;
+                            preview.appendChild(div);
+                        });
+                    }
+                }
+            }
+
             const btn = form.querySelector('button[type="submit"]');
             if (btn) btn.innerHTML = '<i class="material-icons-round">save</i> Mettre à jour';
 
-            this.show();
+            const headerTitle = this.querySelector('.header-title');
+            if (headerTitle) headerTitle.textContent = 'Modifier l\'envie';
+
+            loadingOverlay.remove();
         } catch (err) {
+            loadingOverlay.remove();
             console.error('Erreur chargement édition', err);
             alert("Impossible de charger l'annonce pour édition");
         }
@@ -628,14 +741,27 @@ export class CreationPage extends HTMLElement {
 
     show() {
         this.querySelector('#creationPage').style.display = 'block';
+        if (this._pendingEdit) {
+            const data = this._pendingEdit;
+            this._pendingEdit = null;
+            this.edit(data);
+        }
     }
 
     hide() {
         this.querySelector('#creationPage').style.display = 'none';
 
-        // Cancel edit mode if hidden
+        this._editToken = null;
         this._editMode = false;
         this._editDesireId = null;
+        this._existingImages = null;
+
+        const overlay = this.querySelector('.edit-loading-overlay');
+        if (overlay) overlay.remove();
+
+        const headerTitle = this.querySelector('.header-title');
+        if (headerTitle) headerTitle.textContent = 'Proposer une envie';
+
         const form = this.querySelector('#creationForm');
         if (form) {
             const btn = form.querySelector('button[type="submit"]');

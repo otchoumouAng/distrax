@@ -1,7 +1,7 @@
-# Guide de déploiement — Distrax
+# Guide de déploiement — Dystrax
 
 > **Serveur cible** : Ubuntu 22.04 LTS  
-> **Domaines** : `distrax.com` (frontend) · `api.distrax.com` (backend)  
+> **Domaines** : `dystrax.com` (frontend) · `api.dystrax.com` (backend)  
 > **Stack** : Nginx · PostgreSQL 15 · Python 3.11 · Node 20 · Certbot (SSL)
 
 ---
@@ -10,13 +10,14 @@
 
 1. [Prérequis serveur](#1-prérequis-serveur)
 2. [PostgreSQL — Base de données](#2-postgresql--base-de-données)
-3. [Backend — Distrax-Api (FastAPI)](#3-backend--distrax-api-fastapi)
-4. [Frontend — Distrax (Vite SPA)](#4-frontend--distrax-vite-spa)
-5. [Nginx — Reverse proxy](#5-nginx--reverse-proxy)
-6. [SSL — Certificats Let's Encrypt](#6-ssl--certificats-lets-encrypt)
-7. [Vérification finale](#7-vérification-finale)
-8. [Maintenance & mises à jour](#8-maintenance--mises-à-jour)
-9. [Variables d'environnement — Référence complète](#9-variables-denvironnement--référence-complète)
+3. [Backend — Dystrax-Api (FastAPI)](#3-backend--dystrax-api-fastapi) — *configuration, activation, Nginx, SSL*
+4. [Frontend — Dystrax (Vite SPA)](#4-frontend--dystrax-vite-spa) — *configuration, build, Nginx, SSL*
+5. [Vérification finale](#5-vérification-finale)
+6. [Maintenance & mises à jour](#6-maintenance--mises-à-jour)
+7. [Variables d'environnement — Référence complète](#7-variables-denvironnement--référence-complète)
+8. [Migration : Backend Distrax déjà déployé → Dystrax](#8-migration--backend-distrax-déjà-déployé--dystrax)
+
+> **Ordre recommandé** : Terminer toutes les étapes du backend (section 3) avant de passer au frontend (section 4).
 
 ---
 
@@ -55,7 +56,7 @@ nginx -v               # nginx/1.x.x
 ### 1.3 Créer l'utilisateur applicatif (optionnel, recommandé)
 
 ```bash
-sudo adduser --system --group --home /var/www/distrax distrax
+sudo adduser --system --group --home /var/www/dystrax dystrax
 ```
 
 ---
@@ -73,9 +74,9 @@ sudo systemctl start postgresql
 
 ```bash
 sudo -u postgres psql <<'SQL'
-CREATE USER distrax_user WITH PASSWORD 'MotDePasseTresSecurise123!';
-CREATE DATABASE distrax OWNER distrax_user;
-GRANT ALL PRIVILEGES ON DATABASE distrax TO distrax_user;
+CREATE USER dystrax_user WITH PASSWORD 'MotDePasseTresSecurise123!';
+CREATE DATABASE dystrax OWNER dystrax_user;
+GRANT ALL PRIVILEGES ON DATABASE dystrax TO dystrax_user;
 \q
 SQL
 ```
@@ -86,25 +87,25 @@ SQL
 ### 2.3 Vérifier la connexion
 
 ```bash
-psql "postgresql://distrax_user:MotDePasseTresSecurise123!@localhost:5432/distrax" -c "\l"
+psql "postgresql://dystrax_user:MotDePasseTresSecurise123!@localhost:5432/dystrax" -c "\l"
 ```
 
 ---
 
-## 3. Backend — Distrax-Api (FastAPI)
+## 3. Backend — Dystrax-Api (FastAPI)
 
 ### 3.1 Cloner le dépôt
 
 ```bash
 cd /var/www
-sudo mkdir -p distrax-api
-sudo chown $USER:$USER distrax-api
-cd distrax-api
+sudo mkdir -p dystrax-api
+sudo chown $USER:$USER dystrax-api
+cd dystrax-api
 git clone <URL_DU_REPO_API> .    # le point "." clone directement dans le dossier courant
 ```
 
 > **Important** : Le `.` final est indispensable. Sans lui, Git crée un sous-dossier
-> supplémentaire (ex. `distrax-api/api-distrax/`) et les chemins dans systemd
+> supplémentaire (ex. `dystrax-api/api-dystrax/`) et les chemins dans systemd
 > et le venv seront incorrects.
 
 ### 3.2 Créer l'environnement virtuel Python
@@ -131,18 +132,18 @@ nano .env.prod
 Contenu de `.env.prod` à remplir :
 
 ```ini
-DATABASE_URL=postgresql://distrax_user:MotDePasseTresSecurise123!@localhost:5432/distrax
+DATABASE_URL=postgresql://dystrax_user:MotDePasseTresSecurise123!@localhost:5432/dystrax
 SECRET_KEY=<générer avec: openssl rand -hex 32>
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
-CORS_ORIGINS=https://distrax.com,https://www.distrax.com
+CORS_ORIGINS=https://dystrax.com,https://www.dystrax.com
 
 # AWS S3 (upload d'images)
 AWS_REGION=eu-west-1
 AWS_ACCESS_KEY_ID=<votre clé>
 AWS_SECRET_ACCESS_KEY=<votre secret>
-S3_BUCKET_NAME=distrax-uploads
+S3_BUCKET_NAME=dystrax-uploads
 
 ```
 
@@ -165,26 +166,26 @@ Résultat attendu : `01_users.sql ... OK` jusqu'à `12_fuzzy_search.sql ... OK`
 
 ```bash
 uvicorn app.main:app --host 127.0.0.1 --port 8000
-# Ouvrir http://127.0.0.1:8000 → {"message":"Distrax API is running..."}
+# Ouvrir http://127.0.0.1:8000 → {"message":"Dystrax API is running..."}
 # Ctrl+C pour arrêter
 ```
 
-### 3.6 Créer un service systemd
+### 3.6 Créer et activer le service systemd
 
 ```bash
-sudo nano /etc/systemd/system/distrax-api.service
+sudo nano /etc/systemd/system/dystrax-api.service
 ```
 
 ```ini
 [Unit]
-Description=Distrax FastAPI Backend
+Description=Dystrax FastAPI Backend
 After=network.target postgresql.service
 
 [Service]
 User=www-data
 Group=www-data
-WorkingDirectory=/var/www/distrax-api
-ExecStart=/var/www/distrax-api/venv/bin/uvicorn app.main:app \
+WorkingDirectory=/var/www/dystrax-api
+ExecStart=/var/www/dystrax-api/venv/bin/uvicorn app.main:app \
     --host 127.0.0.1 \
     --port 8000 \
     --workers 4 \
@@ -192,7 +193,7 @@ ExecStart=/var/www/distrax-api/venv/bin/uvicorn app.main:app \
     --forwarded-allow-ips='*'
 Restart=always
 RestartSec=5
-Environment="PATH=/var/www/distrax-api/venv/bin"
+Environment="PATH=/var/www/dystrax-api/venv/bin"
 
 [Install]
 WantedBy=multi-user.target
@@ -200,23 +201,75 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable distrax-api
-sudo systemctl start distrax-api
-sudo systemctl status distrax-api
+sudo systemctl enable dystrax-api
+sudo systemctl start dystrax-api
+sudo systemctl status dystrax-api
 ```
+
+### 3.7 Nginx — Configuration du reverse proxy pour l'API
+
+```bash
+sudo nano /etc/nginx/sites-available/dystrax-api
+```
+
+```nginx
+server {
+    listen 80;
+    server_name api.dystrax.com;
+
+    # Taille max des uploads (images)
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+```bash
+# Désactiver la page par défaut de Nginx (sinon elle prend la priorité)
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Activer le site API
+sudo ln -sf /etc/nginx/sites-available/dystrax-api /etc/nginx/sites-enabled/
+
+# Vérifier et recharger Nginx
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 3.8 SSL — Certificat pour api.dystrax.com
+
+Vérifier que `api.dystrax.com` pointe vers `<IP_SERVEUR>` dans le DNS, puis :
+
+```bash
+sudo certbot --nginx -d api.dystrax.com
+```
+
+Certbot modifie automatiquement la configuration Nginx pour activer HTTPS.
+
+> **À ce stade** : `https://api.dystrax.com` doit répondre avec `{"message":"Dystrax API is running..."}`
 
 ---
 
-## 4. Frontend — Distrax (Vite SPA)
+## 4. Frontend — Dystrax (Vite SPA)
+
+> **Prérequis** : Le backend doit être opérationnel (section 3 terminée). L'API doit répondre sur `https://api.dystrax.com`.
 
 ### 4.1 Cloner le dépôt
 
 ```bash
 cd /var/www
-sudo mkdir -p distrax
-sudo chown $USER:$USER distrax
-git clone <URL_DU_REPO_FRONTEND> distrax-src
-cd distrax-src
+sudo mkdir -p dystrax
+sudo chown $USER:$USER dystrax
+git clone <URL_DU_REPO_FRONTEND> dystrax-src
+cd dystrax-src
 ```
 
 ### 4.2 Installer les dépendances Node
@@ -235,7 +288,7 @@ EOF
 
 # .env.prod : URL de l'API de production
 cat > .env.prod <<'EOF'
-VITE_API_URL=https://api.distrax.com/api/v1
+VITE_API_URL=https://api.dystrax.com/api/v1
 VITE_FIREBASE_API_KEY=<votre clé Firebase>
 VITE_FIREBASE_PROJECT_ID=<votre project id>
 VITE_FIREBASE_APP_ID=<votre app id>
@@ -255,27 +308,23 @@ Le build génère le dossier `dist/`.
 ### 4.5 Déployer les fichiers statiques
 
 ```bash
-sudo cp -r dist/. /var/www/distrax/
-sudo chown -R www-data:www-data /var/www/distrax
-sudo chmod -R 755 /var/www/distrax
+sudo cp -r dist/. /var/www/dystrax/
+sudo chown -R www-data:www-data /var/www/dystrax
+sudo chmod -R 755 /var/www/dystrax
 ```
 
----
-
-## 5. Nginx — Reverse proxy
-
-### 5.1 Configuration Frontend (`distrax.com`)
+### 4.6 Nginx — Configuration du reverse proxy pour le frontend
 
 ```bash
-sudo nano /etc/nginx/sites-available/distrax
+sudo nano /etc/nginx/sites-available/dystrax
 ```
 
 ```nginx
 server {
     listen 80;
-    server_name distrax.com www.distrax.com;
+    server_name dystrax.com www.dystrax.com;
 
-    root /var/www/distrax;
+    root /var/www/dystrax;
     index index.html;
 
     # Compression gzip
@@ -301,111 +350,61 @@ server {
 }
 ```
 
-### 5.2 Configuration Backend (`api.distrax.com`)
-
 ```bash
-sudo nano /etc/nginx/sites-available/distrax-api
-```
+# Activer le site frontend (l'API est déjà activée en 3.7)
+sudo ln -sf /etc/nginx/sites-available/dystrax /etc/nginx/sites-enabled/
 
-```nginx
-server {
-    listen 80;
-    server_name api.distrax.com;
-
-    # Taille max des uploads (images)
-    client_max_body_size 10M;
-
-    location / {
-        proxy_pass         http://127.0.0.1:8000;
-        proxy_http_version 1.1;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-    }
-}
-```
-
-### 5.3 Activer les sites
-
-```bash
-# Désactiver la page par défaut de Nginx (sinon elle prend la priorité)
-sudo rm /etc/nginx/sites-enabled/default
-
-sudo ln -s /etc/nginx/sites-available/distrax     /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/distrax-api /etc/nginx/sites-enabled/
-
-# Vérifier la configuration
+# Vérifier et recharger Nginx
 sudo nginx -t
-
-# Recharger Nginx
 sudo systemctl reload nginx
 ```
 
-> **Attention** : Si vous voyez "Welcome to nginx!" en accédant à l'IP, c'est que
-> le site `default` est encore actif. Vérifiez avec `ls /etc/nginx/sites-enabled/`
-> et supprimez le lien `default` si présent.
+### 4.7 SSL — Certificats pour dystrax.com
 
----
-
-## 6. SSL — Certificats Let's Encrypt
-
-### 6.1 S'assurer que les domaines pointent vers le serveur
-
-Vérifier dans votre gestionnaire DNS que :
-- `distrax.com` → `<IP_SERVEUR>`
-- `www.distrax.com` → `<IP_SERVEUR>`
-- `api.distrax.com` → `<IP_SERVEUR>`
-
-### 6.2 Obtenir les certificats
+Vérifier que `dystrax.com` et `www.dystrax.com` pointent vers `<IP_SERVEUR>` dans le DNS, puis :
 
 ```bash
-# Frontend
-sudo certbot --nginx -d distrax.com -d www.distrax.com
-
-# Backend API
-sudo certbot --nginx -d api.distrax.com
+sudo certbot --nginx -d dystrax.com -d www.dystrax.com
 ```
 
-Certbot modifie automatiquement les fichiers Nginx pour activer HTTPS et rediriger HTTP → HTTPS.
-
-### 6.3 Tester le renouvellement automatique
+### 4.8 Tester le renouvellement automatique des certificats
 
 ```bash
 sudo certbot renew --dry-run
 ```
 
+> **À ce stade** : `https://dystrax.com` doit afficher la page d'accueil de l'application.
+
 ---
 
-## 7. Vérification finale
+## 5. Vérification finale
 
-### 7.1 Checklist
+### 5.1 Checklist
 
 ```bash
 # Services actifs
 sudo systemctl status nginx
-sudo systemctl status distrax-api
+sudo systemctl status dystrax-api
 sudo systemctl status postgresql
 
 # Logs de l'API en temps réel
-sudo journalctl -u distrax-api -f
+sudo journalctl -u dystrax-api -f
 
 # Logs Nginx
 sudo tail -f /var/log/nginx/access.log
 sudo tail -f /var/log/nginx/error.log
 ```
 
-### 7.2 Tests fonctionnels
+### 5.2 Tests fonctionnels
 
 | URL | Résultat attendu |
 |-----|-----------------|
-| `https://distrax.com` | Page d'accueil de l'application |
-| `https://api.distrax.com` | `{"message":"Distrax API is running..."}` |
-| `https://api.distrax.com/docs` | Interface Swagger de l'API |
-| `https://api.distrax.com/api/v1/filters/categories` | JSON avec la liste des catégories |
+| `https://dystrax.com` | Page d'accueil de l'application |
+| `https://api.dystrax.com` | `{"message":"Dystrax API is running..."}` |
+| `https://api.dystrax.com/docs` | Interface Swagger de l'API |
+| `https://api.dystrax.com/api/v1/filters/categories` | JSON avec la liste des catégories |
 
-### 7.3 Ouvrir les ports du pare-feu
+### 5.3 Ouvrir les ports du pare-feu
 
 ```bash
 sudo ufw allow 80/tcp
@@ -421,73 +420,214 @@ sudo ufw status
 
 ---
 
-## 8. Maintenance & mises à jour
+## 6. Maintenance & mises à jour
 
-### 8.1 Mettre à jour le backend
+### 6.1 Mettre à jour le backend
 
 ```bash
-cd /var/www/distrax-api
+cd /var/www/dystrax-api
 git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt   # si nouvelles dépendances
 python scripts/setup_db.py        # si nouvelles migrations SQL
-sudo systemctl restart distrax-api
+sudo systemctl restart dystrax-api
 ```
 
-### 8.2 Mettre à jour le frontend
+### 6.2 Mettre à jour le frontend
 
 ```bash
-cd /var/www/distrax-src
+cd /var/www/dystrax-src
 git pull origin main
 npm install                        # si nouvelles dépendances
 npm run build:prod
-sudo cp -r dist/. /var/www/distrax/
-sudo chown -R www-data:www-data /var/www/distrax
+sudo cp -r dist/. /var/www/dystrax/
+sudo chown -R www-data:www-data /var/www/dystrax
 ```
 
-### 8.3 Sauvegarder la base de données
+### 6.3 Sauvegarder la base de données
 
 ```bash
 # Dump complet
-pg_dump -U distrax_user distrax > /var/backups/distrax_$(date +%Y%m%d_%H%M).sql
+pg_dump -U dystrax_user dystrax > /var/backups/dystrax_$(date +%Y%m%d_%H%M).sql
 
 # Automatiser via cron (tous les jours à 3h)
 sudo crontab -e
 # Ajouter :
-# 0 3 * * * pg_dump -U distrax_user distrax > /var/backups/distrax_$(date +\%Y\%m\%d).sql
+# 0 3 * * * pg_dump -U dystrax_user dystrax > /var/backups/dystrax_$(date +\%Y\%m\%d).sql
 ```
 
 ---
 
-## 9. Variables d'environnement — Référence complète
+## 7. Variables d'environnement — Référence complète
 
-### Backend (`/var/www/distrax-api/.env.prod`)
+### Backend (`/var/www/dystrax-api/.env.prod`)
 
 | Variable | Description | Exemple |
 |----------|-------------|---------|
-| `DATABASE_URL` | URL PostgreSQL complète | `postgresql://user:pass@localhost:5432/distrax` |
+| `DATABASE_URL` | URL PostgreSQL complète | `postgresql://user:pass@localhost:5432/dystrax` |
 | `SECRET_KEY` | Clé JWT (32 bytes hex) | `openssl rand -hex 32` |
 | `ALGORITHM` | Algorithme JWT | `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Durée de validité du token | `10080` (7 jours) |
-| `CORS_ORIGINS` | Origines autorisées (CORS) | `https://distrax.com,https://www.distrax.com` |
+| `CORS_ORIGINS` | Origines autorisées (CORS) | `https://dystrax.com,https://www.dystrax.com` |
 | `AWS_REGION` | Région S3 pour les uploads | `eu-west-1` |
 | `AWS_ACCESS_KEY_ID` | Clé d'accès AWS | — |
 | `AWS_SECRET_ACCESS_KEY` | Secret AWS | — |
-| `S3_BUCKET_NAME` | Bucket S3 pour les images | `distrax-uploads` |
+| `S3_BUCKET_NAME` | Bucket S3 pour les images | `dystrax-uploads` |
 
-### Frontend (`/var/www/distrax-src/.env.prod`)
+### Frontend (`/var/www/dystrax-src/.env.prod`)
 
 | Variable | Description | Exemple |
 |----------|-------------|---------|
-| `VITE_API_URL` | URL de base de l'API | `https://api.distrax.com/api/v1` |
+| `VITE_API_URL` | URL de base de l'API | `https://api.dystrax.com/api/v1` |
 
 ---
 
 > **Checklist sécurité avant de rendre le site public**
 > - [ ] `SECRET_KEY` générée avec `openssl rand -hex 32` (jamais la valeur par défaut)
-> - [ ] `CORS_ORIGINS` restreint à `https://distrax.com,https://www.distrax.com`
+> - [ ] `CORS_ORIGINS` restreint à `https://dystrax.com,https://www.dystrax.com`
 > - [ ] Mot de passe PostgreSQL fort, connexion uniquement en local (`127.0.0.1`)
 > - [ ] Fichiers `.env*` non versionnés (vérifier `.gitignore`)
 > - [ ] SSL actif sur les deux domaines
 > - [ ] Pare-feu actif (`ufw`) avec seulement les ports 22, 80, 443 ouverts
 > - [ ] Page `/docs` de Swagger désactivée en prod si non nécessaire
+
+---
+
+## 8. Migration : Backend Distrax déjà déployé → Dystrax
+
+Si vous avez déjà déployé le backend sous l’ancien nom (Distrax) et que `dystrax.com` affiche actuellement `{"message":"Distrax API is running..."}`, suivez ces étapes pour corriger avant de déployer le frontend.
+
+### Étape 1 — Se connecter au serveur
+
+```bash
+ssh user@<IP_SERVEUR>
+```
+
+### Étape 2 — Mettre à jour CORS dans `.env.prod`
+
+Le frontend sur `dystrax.com` doit être autorisé par l’API. Modifiez le fichier de config du backend :
+
+```bash
+nano /var/www/distrax-api/.env.prod
+```
+
+Vérifiez ou modifiez la ligne `CORS_ORIGINS` :
+
+```ini
+CORS_ORIGINS=https://dystrax.com,https://www.dystrax.com
+```
+
+Si vous utilisez aussi `api.dystrax.com` pour l’API, vous pouvez ajouter :
+
+```ini
+CORS_ORIGINS=https://dystrax.com,https://www.dystrax.com,https://api.dystrax.com
+```
+
+Sauvegardez (`Ctrl+O`, `Entrée`, `Ctrl+X`).
+
+### Étape 3 — Modifier le message de l’API (optionnel mais recommandé)
+
+Dans le dépôt backend, modifiez le fichier qui renvoie le message de santé (souvent `app/main.py` ou `app/routers/health.py`). Remplacez :
+
+```python
+{"message": "Distrax API is running..."}
+```
+
+par :
+
+```python
+{"message": "Dystrax API is running..."}
+```
+
+Puis sur le serveur :
+
+```bash
+cd /var/www/distrax-api
+git pull origin main   # si vous avez poussé la modification
+# OU éditez directement : nano app/main.py
+sudo systemctl restart distrax-api
+```
+
+### Étape 4 — Configurer Nginx pour séparer API et frontend
+
+Actuellement, `dystrax.com` sert probablement l’API. Il faut que :
+
+- **api.dystrax.com** → API (backend)
+- **dystrax.com** → frontend (à déployer ensuite)
+
+Listez les sites Nginx actuels :
+
+```bash
+ls -la /etc/nginx/sites-enabled/
+```
+
+**4a. Créer ou modifier la config pour l’API** (`api.dystrax.com`) :
+
+```bash
+sudo nano /etc/nginx/sites-available/dystrax-api
+```
+
+```nginx
+server {
+    listen 80;
+    server_name api.dystrax.com;
+
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass         http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+**4b. Activer le site API** :
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/dystrax-api /etc/nginx/sites-enabled/
+```
+
+**4c. Si `dystrax.com` pointe encore vers l’API**, désactiver l’ancienne config (ex. `distrax` ou `default`) ou la modifier pour qu’elle ne serve plus l’API sur `dystrax.com`. Vous ajouterez la config frontend à l’étape de déploiement du frontend.
+
+**4d. Vérifier et recharger Nginx** :
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### Étape 5 — SSL pour api.dystrax.com (si pas déjà fait)
+
+```bash
+sudo certbot --nginx -d api.dystrax.com
+```
+
+### Étape 6 — Vérifier
+
+```bash
+# L’API doit répondre sur api.dystrax.com
+curl https://api.dystrax.com
+# → {"message":"Dystrax API is running..."}
+
+# Test d’un endpoint
+curl https://api.dystrax.com/api/v1/filters/categories
+```
+
+### Étape 7 — DNS
+
+Vérifiez que votre DNS pointe bien :
+
+- **api.dystrax.com** → `<IP_SERVEUR>`
+- **dystrax.com** → `<IP_SERVEUR>`
+- **www.dystrax.com** → `<IP_SERVEUR>`
+
+---
+
+**Résumé des chemins** : si votre backend est déjà dans `/var/www/distrax-api`, vous pouvez garder ce chemin. Les noms `dystrax-api` dans ce guide sont pour les nouvelles installations. Pour la migration, utilisez vos chemins existants (`distrax-api`, `distrax_user`, etc.) et mettez à jour uniquement les variables d’environnement et les configs Nginx.
+
+Une fois ces étapes terminées, vous pouvez passer au [déploiement du frontend](#4-frontend--dystrax-vite-spa).

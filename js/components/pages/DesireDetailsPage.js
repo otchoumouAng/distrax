@@ -197,34 +197,42 @@ export class DesireDetailsPage extends HTMLElement {
                 .price-sub { font-size: 12px; color: var(--text-muted); }
 
                 .join-action-btn {
-                    flex: 1; max-width: 250px;
-                    /* Hauteur fixe pour éviter le layout shift quand le texte change */
-                    height: 52px; min-height: 52px;
-                    padding: 0 20px; border-radius: 100px; border: none;
-                    background: linear-gradient(135deg, var(--primary), var(--primary-light));
-                    color: white; font-weight: 700; font-size: 15px; cursor: pointer;
-                    box-shadow: 0 4px 15px color-mix(in srgb, var(--primary) 30%, transparent);
-                    text-align: center; transition: background 0.3s, transform 0.1s;
-                    display: flex; align-items: center; justify-content: center; gap: 8px;
+                    /* taille auto — ne s'étire pas */
+                    flex: 0 0 auto;
+                    height: 44px;
+                    padding: 0 24px; border-radius: 100px;
+                    border: none;
+                    background: var(--primary);
+                    color: white; font-weight: 600; font-size: 13px; cursor: pointer;
+                    box-shadow: 0 2px 10px color-mix(in srgb, var(--primary) 30%, transparent);
+                    transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.15s;
+                    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                    letter-spacing: 0.02em; white-space: nowrap;
                 }
-                .join-action-btn:active { transform: scale(0.97); }
-                /* Quitter — même style que le leave-btn des cartes MAIS hauteur 52px maintenue */
+                .join-action-btn:hover {
+                    opacity: 0.9;
+                    box-shadow: 0 4px 16px color-mix(in srgb, var(--primary) 40%, transparent);
+                    transform: translateY(-1px);
+                }
+                .join-action-btn:active { transform: scale(0.97); opacity: 1; }
                 .join-action-btn.joined {
                     background: transparent;
-                    border: 1px solid #ef4444;
+                    border: none;
                     color: #ef4444;
                     box-shadow: none;
-                    /* Garder la même height pour éviter le layout shift */
-                    font-size: 14px;
-                    font-weight: 600;
-                    gap: 6px;
-                    border-radius: 100px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+                .join-action-btn.joined:hover {
+                    background: rgba(239,68,68,0.06);
+                    opacity: 1;
                 }
                 .join-action-btn.creator-badge {
                     background: linear-gradient(135deg, #f59e0b, #f97316);
-                    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+                    box-shadow: 0 2px 10px rgba(245,158,11,0.25);
                     cursor: default;
                     pointer-events: none;
+                    font-size: 13px;
                 }
 
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -441,7 +449,7 @@ export class DesireDetailsPage extends HTMLElement {
         } else if (this._hasJoined) {
             if (footer) footer.style.display = '';
             btn.classList.add('joined');
-            btn.innerHTML = '<i class="material-icons-round" style="font-size: 18px;">logout</i> Quitter';
+            btn.innerHTML = '<i class="material-icons-round" style="font-size: 16px;">close</i> Annuler';
         } else {
             if (footer) footer.style.display = '';
             btn.innerHTML = 'Rejoindre';
@@ -553,14 +561,16 @@ export class DesireDetailsPage extends HTMLElement {
         try {
             const { api } = await import('../../api.js');
             if (!api.isAuthenticated()) {
-                // Non connecté : bouton "Rejoindre" simple
-                joinBtn.disabled = false;
-                this._updateJoinButton(joinBtn);
+                // Non connecté : inviter à se connecter pour rejoindre
+                if (joinBtn) {
+                    joinBtn.disabled = false;
+                    joinBtn.innerHTML = '<i class="material-icons-round" style="font-size:18px;vertical-align:middle;">login</i> Se connecter pour rejoindre';
+                }
                 return;
             }
 
             // Récupérer l'utilisateur connecté (via cache localStorage d'abord)
-            const cachedUser = JSON.parse(localStorage.getItem('distrax-user') || 'null');
+            const cachedUser = JSON.parse(localStorage.getItem('dystrax-user') || 'null');
             const me = cachedUser || await api.getMe();
 
             // Optimisation : si la carte indique déjà que l'utilisateur a rejoint (mode='joined')
@@ -775,13 +785,13 @@ export class DesireDetailsPage extends HTMLElement {
     _handleShare() {
         if (!this._desireId) return;
         const titleEl = this.querySelector('#dTitle');
-        const title = (titleEl && titleEl.textContent) ? titleEl.textContent.trim() : 'Une envie sur Distrax';
+        const title = (titleEl && titleEl.textContent) ? titleEl.textContent.trim() : 'Une envie sur Dystrax';
         const url   = `${window.location.origin}${window.location.pathname || '/'}#desire/${this._desireId}`;
-        const text  = `${title} — Découvre cette envie sur Distrax`;
+        const text  = `${title} — Découvre cette envie sur Dystrax`;
 
         // Web Share API — ouvre le menu natif du système (WhatsApp, Instagram, TikTok, etc.)
         if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-            navigator.share({ title: 'Distrax', text, url })
+            navigator.share({ title: 'Dystrax', text, url })
                 .then(() => {
                     window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Partage réussi', type: 'success' } }));
                 })
@@ -801,7 +811,7 @@ export class DesireDetailsPage extends HTMLElement {
      * WhatsApp, Facebook, Telegram, Twitter/X, Copier le lien.
      */
     _showShareSheet(url, text) {
-        const existing = document.getElementById('_distraxShareSheet');
+        const existing = document.getElementById('_dystraxShareSheet');
         if (existing) existing.remove();
 
         const encodedUrl  = encodeURIComponent(url);
@@ -847,7 +857,7 @@ export class DesireDetailsPage extends HTMLElement {
         ];
 
         const sheet = document.createElement('div');
-        sheet.id = '_distraxShareSheet';
+        sheet.id = '_dystraxShareSheet';
         sheet.style.cssText = `
             position:fixed; inset:0; z-index:9999;
             background:rgba(0,0,0,.5); backdrop-filter:blur(4px);

@@ -1,6 +1,6 @@
 {
-    "name": "Distrax - De quoi avez-vous envie aujourd'hui ?",
-    "short_name": "Distrax",
+    "name": "Dystrax - De quoi avez-vous envie aujourd'hui ?",
+    "short_name": "Dystrax",
     "description": "Trouvez et partagez des envies d'activités autour de vous.",
     "start_url": "/",
     "display": "standalone",

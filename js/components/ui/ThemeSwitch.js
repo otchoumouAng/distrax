@@ -1,7 +1,7 @@
 export class ThemeSwitch extends HTMLElement {
     constructor() {
         super();
-        this.currentTheme = localStorage.getItem('distrax-theme') || 'light';
+        this.currentTheme = localStorage.getItem('dystrax-theme') || 'light';
     }
 
     connectedCallback() {
@@ -36,7 +36,7 @@ export class ThemeSwitch extends HTMLElement {
 
     applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('distrax-theme', theme);
+        localStorage.setItem('dystrax-theme', theme);
 
         // Notifier le reste de l'app si nécessaire
         this.dispatchEvent(new CustomEvent('theme-changed', {

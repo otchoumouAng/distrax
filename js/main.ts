@@ -37,7 +37,7 @@ import './components/pages/BoostDetailsPage.js';
    4. THÈME IMMÉDIAT (avant DOMContentLoaded)
    --------------------------------------------------------------- */
 // Appliquer immédiatement le thème sauvegardé pour éviter le flash
-const _savedTheme = localStorage.getItem('distrax-theme');
+const _savedTheme = localStorage.getItem('dystrax-theme');
 if (_savedTheme === 'dark' || _savedTheme === 'light') {
     document.documentElement.setAttribute('data-theme', _savedTheme);
 }
@@ -47,7 +47,7 @@ if (_savedTheme === 'dark' || _savedTheme === 'light') {
    --------------------------------------------------------------- */
 GlobalStore.subscribe('theme', (theme: string) => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('distrax-theme', theme);
+    localStorage.setItem('dystrax-theme', theme);
 });
 // Synchroniser le store avec la valeur déjà en localStorage
 if (_savedTheme) {
@@ -250,6 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
             (desireDetailsPage as any).close();
             return;
         }
+        if (_currentPageId === 'profile' || _currentPageId === 'notifications') {
+            history.replaceState({ page: 'home' }, '', '#home');
+            navigateTo('home', false);
+            return;
+        }
         navigateTo(e.state?.page || 'home', false);
     });
 
@@ -258,14 +263,27 @@ document.addEventListener('DOMContentLoaded', () => {
     history.replaceState({ page: initialHash }, '', window.location.hash || '#home');
     _currentPageId = initialHash || 'home';
 
+    // Lien partagé : #desire/<uuid> → page publique, ouvre l'overlay de détails
+    const _desireLinkMatch = initialHash.match(/^desire\/([0-9a-f-]{36})$/i);
+    const _desireIdFromLink = _desireLinkMatch ? _desireLinkMatch[1] : null;
+
     customElements.whenDefined('app-home-hero').then(() => {
         // ── Auth guard ──────────────────────────────────────────
-        const targetPage = PUBLIC_PAGES.has(initialHash) ? initialHash : (
-            api.isAuthenticated() ? initialHash : 'login'
-        );
+        // Les liens de partage desire/<id> sont publics (pas besoin d'être connecté pour voir)
+        const isPublic = PUBLIC_PAGES.has(initialHash) || !!_desireIdFromLink;
+        const targetPage = isPublic
+            ? (_desireIdFromLink ? 'home' : initialHash)
+            : (api.isAuthenticated() ? initialHash : 'login');
         navigateTo(targetPage, false);
         if (api.isAuthenticated()) {
             sessionManager.start(); // déjà connecté → démarrer le timer
+        }
+
+        // Ouvrir l'overlay de détails si c'est un lien partagé
+        if (_desireIdFromLink) {
+            setTimeout(() => {
+                desireDetailsPage?.open?.({ id: _desireIdFromLink });
+            }, 150);
         }
 
         // Précharger les feature flags dès le démarrage pour des vérifications synchrones ultérieures
@@ -346,20 +364,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('navigate-create', (e) => {
-        guardedNavigate('creation');
         const detail = (e as CustomEvent).detail;
-        if (detail && detail.editMode) {
-            setTimeout(() => {
-                if (creationPage?.edit) {
-                    creationPage.edit(detail);
-                }
-            }, 100);
+        if (detail && detail.editMode && creationPage) {
+            (creationPage as any)._pendingEdit = detail;
         }
+        guardedNavigate('creation');
     });
 
     window.addEventListener('navigate-back', () => {
         if ((desireDetailsPage as any)?.isOpen?.()) {
             (desireDetailsPage as any).close();
+            return;
+        }
+        if (_currentPageId === 'profile' || _currentPageId === 'notifications') {
+            navigateTo('home');
             return;
         }
         if (window.history.length > 1) window.history.back();
@@ -430,7 +448,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const htmlCard = card as HTMLElement;
                 const cardId = htmlCard.dataset?.desireId || card.getAttribute('desire-id');
                 if (cardId === String(desireId) && card.getAttribute('mode') !== 'owner') {
-                    card.setAttribute('mode', 'joined');
+                    card.setAttribute('mode', 'pending');
                 }
             });
         }
