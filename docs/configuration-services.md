@@ -9,7 +9,8 @@
 
 1. [Google OAuth](#1-google-oauth)
 2. [AWS S3 — Stockage des images](#2-aws-s3--stockage-des-images)
-3. [Appliquer les changements](#3-appliquer-les-changements)
+3. [Lambda — Optimisation des images (thumb / medium WebP)](#3-lambda--optimisation-des-images-thumb--medium-webp)
+4. [Appliquer les changements](#4-appliquer-les-changements)
 
 ---
 
@@ -159,7 +160,35 @@ S3_BUCKET_NAME=dystrax-uploads
 
 ---
 
-## 3. Appliquer les changements
+## 3. Optimisation des images (thumb / medium WebP) — Worker asynchrone
+
+Après chaque upload S3, le frontend appelle `POST /upload/notify` ; l’API enregistre un job dans la table `image_jobs`. Un **worker** (processus Python sur le serveur) traite les jobs un par un : télécharge depuis S3, génère thumb + medium en WebP, re-uploade sur S3.
+
+### 3.1 Structure S3
+
+- **originals/** : fichiers uploadés (clé du type `originals/<année>/<uuid>.<ext>`).
+- **thumb/** : vignettes (largeur max 300 px), écrites par le worker.
+- **medium/** : images intermédiaires (largeur max 800 px), écrites par le worker.
+
+### 3.2 Worker (backend Distrax-Api)
+
+- File d’attente : table PostgreSQL `image_jobs` (migration `sql/15_image_jobs.sql`).
+- Script : `scripts/worker_image.py` (Pillow + boto3). À lancer en service systemd (voir [Déploiement](deploiement.md) section 3.7).
+- Une image à la fois, faible usage RAM.
+
+### 3.3 Convention des URLs (frontend)
+
+À partir de l’URL canonique de l’original (ex. `https://bucket.s3.region.amazonaws.com/originals/2025/uuid.jpg`) :
+
+- **Thumb** : remplacer `originals/` par `thumb/` et l’extension par `.webp` → utilisée pour les cartes (listes).
+- **Medium** : remplacer `originals/` par `medium/` et l’extension par `.webp` → utilisée pour le carousel de la page détail.
+- **Full** : URL canonique → utilisée pour le lightbox (pleine résolution).
+
+Les anciennes URLs (sans préfixe `originals/`) restent affichées telles quelles (rétrocompatibilité).
+
+---
+
+## 4. Appliquer les changements
 
 Après avoir mis à jour `.env.prod` sur le serveur, redémarrer l'API :
 
@@ -168,7 +197,7 @@ sudo systemctl restart dystrax-api
 sudo systemctl status dystrax-api
 ```
 
-Et rebuilder le frontend si les clés Firebase ont changé :
+Et rebuilder le frontend si besoin :
 
 ```bash
 cd /var/www/dystrax-src

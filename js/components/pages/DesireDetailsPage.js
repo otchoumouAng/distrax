@@ -1,4 +1,5 @@
-import { escapeHtml, safeUrl } from '../../utils/escapeHtml.js';
+import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
+import { resolveImageUrl, getImageVariantUrl } from '../../utils/imageUrl.js';
 
 export class DesireDetailsPage extends HTMLElement {
     constructor() {
@@ -8,6 +9,8 @@ export class DesireDetailsPage extends HTMLElement {
         this._desireId = null;  // ID de l'envie actuellement affichée
         this._isCreator = false; // si l'utilisateur est le créateur
         this._hasJoined = false; // si l'utilisateur a déjà rejoint
+        /** Position de scroll sauvegardée pour restaurer à la fermeture (body lock). */
+        this._savedScrollY = 0;
     }
 
     connectedCallback() {
@@ -257,10 +260,11 @@ export class DesireDetailsPage extends HTMLElement {
                         <span class="m-tag"><i class="material-icons-round">location_on</i> <span id="dCommune">Plateau</span></span>
                         <span class="m-tag"><i class="material-icons-round">calendar_today</i> <span id="dDate">Samedi, 14:00</span></span>
                         <span class="m-tag"><i class="material-icons-round">group</i> <span id="dSpots">Reste 5 places</span></span>
+                        <span class="m-tag" id="dViewCountWrap" style="display: none;"><i class="material-icons-round">visibility</i> <span id="dViewCountNum">0</span> vues</span>
                     </div>
 
                     <div class="host-card">
-                        <img src="" id="dAvatar" class="host-avatar" alt="Hôte">
+                        <img src="" id="dAvatar" class="host-avatar" alt="Hôte" data-fallback-avatar="${escapeHtml(DEFAULT_AVATAR_DATA_URI)}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
                         <div class="host-info">
                             <h4 id="dAuthor">Alice B.</h4>
                             <p>Organisateur (Il y a <span id="dTime">3 heures</span>)</p>
@@ -311,7 +315,9 @@ export class DesireDetailsPage extends HTMLElement {
     setupListeners() {
         const backBtn = this.querySelector('.back-btn');
         if (backBtn) {
-            backBtn.addEventListener('click', () => this.close());
+            backBtn.addEventListener('click', () => {
+                window.dispatchEvent(new CustomEvent('navigate-back', { bubbles: true, composed: true }));
+            });
         }
 
         const shareBtn = this.querySelector('.share-btn');
@@ -321,7 +327,9 @@ export class DesireDetailsPage extends HTMLElement {
 
         const overlay = this.querySelector('#detailsOverlay');
         if (overlay) {
-            overlay.addEventListener('click', () => this.close());
+            overlay.addEventListener('click', () => {
+                window.dispatchEvent(new CustomEvent('navigate-back', { bubbles: true, composed: true }));
+            });
         }
 
         const carousel = this.querySelector('#detailsHeroCarousel');
@@ -499,9 +507,10 @@ export class DesireDetailsPage extends HTMLElement {
                     date: this._formatDateDetail(full.event_date),
                     spots: `${full.spots_taken ?? 0}/${full.max_spots ?? 1} places`,
                     price: this._formatPriceDetail(full),
-                    avatar: full.user?.avatar_url ?? full.author_avatar_url ?? full.author?.avatar_url ?? '/assets/img/avatar.png',
+                    avatar: resolveImageUrl(full.user?.avatar_url ?? full.author_avatar_url ?? full.author?.avatar_url) || DEFAULT_AVATAR_PATH,
                     images: full.images || [],
                     description: full.description || '',
+                    view_count: full.view_count,
                 };
             } catch (err) {
                 console.warn('[DesireDetails] Erreur chargement envie par id:', err);
@@ -516,11 +525,21 @@ export class DesireDetailsPage extends HTMLElement {
         this.querySelector('#dDate').textContent = data.date || '';
         this.querySelector('#dSpots').textContent = data.spots || '';
         this.querySelector('#dPrice').textContent = data.price || 'Gratuit';
-        this.querySelector('#dAvatar').src = data.avatar || '/assets/img/avatar.png';
+        this.querySelector('#dAvatar').src = data.avatar || DEFAULT_AVATAR_PATH;
+        const viewCountWrap = this.querySelector('#dViewCountWrap');
+        const viewCountNum = this.querySelector('#dViewCountNum');
+        if (viewCountWrap && viewCountNum) {
+            if (data.view_count != null) {
+                viewCountWrap.style.display = '';
+                viewCountNum.textContent = Number(data.view_count).toLocaleString('fr-FR');
+            } else {
+                viewCountWrap.style.display = 'none';
+            }
+        }
         const desc = this.querySelector('#dDescription');
         if (desc) desc.textContent = data.description || 'Aucune description fournie pour cette envie.';
 
-        this.images = data.images || [];
+        this.images = (data.images || []).map(resolveImageUrl).filter(Boolean);
         this.currentIndex = 0;
         this.renderCarousel();
 
@@ -535,7 +554,21 @@ export class DesireDetailsPage extends HTMLElement {
 
         page.classList.add('active');
         overlay.classList.add('active');
+
+        // Verrouiller le scroll de la page : seule la page de détail doit être active
+        this._savedScrollY = window.scrollY ?? window.pageYOffset ?? 0;
+        const html = document.documentElement;
+        html.style.overflow = 'hidden';
         document.body.style.overflow = 'hidden';
+        document.body.style.position = 'fixed';
+        document.body.style.top = `-${this._savedScrollY}px`;
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+
+        if (this._desireId) {
+            import('../../api.js').then(({ api }) => api.recordDesireView(this._desireId).catch(() => {}));
+        }
 
         const navbar = document.querySelector('app-navbar');
         if (navbar) navbar.style.display = 'none';
@@ -664,7 +697,8 @@ export class DesireDetailsPage extends HTMLElement {
                 const st = statusStyles[p.status] || statusStyles.pending;
                 const isPending = !p.status || p.status === 'pending';
                 const pseudoSafe = escapeHtml(p.pseudo || 'Utilisateur');
-                const avatarSrc = safeUrl(p.avatar_url || p.avatar) || (p.avatar_url && p.avatar_url.startsWith('/') ? p.avatar_url : '') || '/assets/img/avatar.png';
+                const avatarSrc = resolveImageUrl(p.avatar_url || p.avatar) || DEFAULT_AVATAR_PATH;
+                const avatarFallback = escapeHtml(DEFAULT_AVATAR_DATA_URI);
                 const phoneDisplay = escapeHtml(p.phone || '');
                 const phoneDigits = p.phone ? String(p.phone).replace(/\D/g, '') : '';
                 const userIdSafe = escapeHtml(String(p.user_id));
@@ -675,7 +709,8 @@ export class DesireDetailsPage extends HTMLElement {
                             src="${escapeHtml(avatarSrc)}"
                             alt="${pseudoSafe}"
                             class="participant-avatar"
-                            onerror="this.src='/assets/img/avatar.png'"
+                            data-fallback-avatar="${avatarFallback}"
+                            onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')"
                         >
                         <div style="flex:1; min-width:0;">
                             <div style="font-size:14px; font-weight:600; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
@@ -775,7 +810,17 @@ export class DesireDetailsPage extends HTMLElement {
             page.style.display = 'none';
             overlay.style.display = 'none';
         }, 300);
+
+        // Restaurer le scroll de la page
+        const html = document.documentElement;
+        html.style.overflow = '';
         document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        window.scrollTo(0, this._savedScrollY);
 
         // Laisser le routeur gérer la navbar selon la page courante (home = visible, profil/notifs = cachée)
         window.dispatchEvent(new CustomEvent('desire-detail-closed', { bubbles: true, composed: true }));
@@ -933,18 +978,41 @@ export class DesireDetailsPage extends HTMLElement {
         });
         sheet.querySelector('#ss-cancel').addEventListener('click', () => sheet.remove());
 
-        // Copier le lien
+        // Copier le lien (fallback textarea + execCommand pour mobile où clipboard.writeText ne colle pas)
         sheet.querySelector('#ss-copy-btn').addEventListener('click', () => {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(url).then(() => {
-                    const btn = sheet.querySelector('#ss-copy-btn');
-                    btn.textContent = 'Copié !';
-                    btn.style.background = '#10b981';
-                    setTimeout(() => sheet.remove(), 1200);
+            const btn = sheet.querySelector('#ss-copy-btn');
+            const done = () => {
+                btn.textContent = 'Copié !';
+                btn.style.background = '#10b981';
+                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Lien copié', type: 'success' } }));
+                setTimeout(() => sheet.remove(), 1200);
+            };
+
+            const fallbackCopy = () => {
+                const ta = document.createElement('textarea');
+                ta.value = url;
+                ta.setAttribute('readonly', '');
+                ta.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                ta.setSelectionRange(0, url.length);
+                let ok = false;
+                try {
+                    ok = document.execCommand('copy');
+                } catch (e) {}
+                document.body.removeChild(ta);
+                return ok;
+            };
+
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                navigator.clipboard.writeText(url).then(() => done()).catch(() => {
+                    if (fallbackCopy()) done();
+                    else window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Copie non prise en charge', type: 'info' } }));
                 });
             } else {
-                window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Lien copié', type: 'success' } }));
-                sheet.remove();
+                if (fallbackCopy()) done();
+                else window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Copie non prise en charge', type: 'info' } }));
             }
         });
 
@@ -972,20 +1040,30 @@ export class DesireDetailsPage extends HTMLElement {
 
         thumbsContainer.style.display = this.images.length > 1 ? 'flex' : 'none';
 
-        this.images.forEach((img, i) => {
+        this.images.forEach((fullUrl, i) => {
+            const mediumUrl = getImageVariantUrl(fullUrl, 'medium') || fullUrl;
             const slide = document.createElement('img');
-            slide.src = img;
+            slide.src = mediumUrl;
+            slide.dataset.fallback = fullUrl;
             slide.className = 'hero-slide';
             slide.alt = `Image ${i + 1}`;
-            // Clic → ouvre le lightbox à cet index
+            slide.onerror = function () {
+                this.onerror = null;
+                if (this.dataset.fallback) this.src = this.dataset.fallback;
+            };
             slide.addEventListener('click', () => this.openLightbox(i));
             carousel.appendChild(slide);
 
             if (this.images.length > 1) {
                 const thumb = document.createElement('img');
-                thumb.src = img;
+                thumb.src = mediumUrl;
+                thumb.dataset.fallback = fullUrl;
                 thumb.className = `thumbnail ${i === 0 ? 'active' : ''}`;
                 thumb.alt = `Miniature ${i + 1}`;
+                thumb.onerror = function () {
+                    this.onerror = null;
+                    if (this.dataset.fallback) this.src = this.dataset.fallback;
+                };
                 thumb.addEventListener('click', () => {
                     const targetScroll = carousel.offsetWidth * i;
                     carousel.scrollTo({ left: targetScroll, behavior: 'smooth' });
@@ -1042,7 +1120,7 @@ export class DesireDetailsPage extends HTMLElement {
             const slide = document.createElement('div');
             slide.className = 'lightbox-slide';
             const img = document.createElement('img');
-            img.src = src;
+            img.src = src; // lightbox: full resolution
             img.alt = `Image ${i + 1}`;
             slide.appendChild(img);
             track.appendChild(slide);

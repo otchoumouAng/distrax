@@ -23,6 +23,8 @@
     --aurora-overlay: rgba(255, 255, 255, 0.4);
 
     --header-height: 80px;
+    /* En-tête résultats + bandeau filtres (page résultats) */
+    --results-header-stack-height: 118px;
 
     /* Thèmes des envies */
     --theme-explore: #3b82f6;

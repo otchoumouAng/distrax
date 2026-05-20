@@ -166,11 +166,39 @@ export class CreationPage extends HTMLElement {
         this.setupEventListeners();
     }
 
+    /** Retourne true si le formulaire contient des données non enregistrées */
+    hasUnsavedContent() {
+        const form = this.querySelector('#creationForm');
+        if (!form) return false;
+        const title = form.querySelector('#titleInput')?.value?.trim() || '';
+        const date = form.querySelector('#dateInput')?.value || '';
+        const address = form.querySelector('#addressInput')?.value?.trim() || '';
+        const desc = form.querySelector('textarea')?.value?.trim() || '';
+        const commune = form.querySelector('#communeSelect')?.value || '';
+        const category = this.querySelector('#categorySelector filter-pill[active], #categorySelector filter-pill.active');
+        const mainContainer = form.querySelector('#mainImageUpload') || form.querySelector('.image-upload:not(.multiple-image-upload)');
+        const mainHasImage = mainContainer && mainContainer.style.backgroundImage && mainContainer.style.backgroundImage !== 'none';
+        const extraPreviews = form.querySelector('#multipleImagesPreview');
+        const hasExtraImages = extraPreviews && extraPreviews.children.length > 0;
+        return !!(title || date || address || desc || commune || category || mainHasImage || hasExtraImages);
+    }
+
     setupEventListeners() {
         const backBtn = this.querySelector('.back-to-home');
         if (backBtn) {
-            backBtn.addEventListener('click', (e) => {
+            backBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
+                if (this.hasUnsavedContent()) {
+                    const { showConfirm } = await import('../../utils/confirm.js');
+                    const ok = await showConfirm({
+                        title: 'Quitter la création ?',
+                        message: 'Vous avez des modifications non enregistrées. Êtes-vous sûr de vouloir quitter ?',
+                        confirmLabel: 'Quitter',
+                        cancelLabel: 'Rester',
+                        type: 'warning'
+                    });
+                    if (!ok) return;
+                }
                 const event = new CustomEvent('navigate-back', { bubbles: true, composed: true });
                 this.dispatchEvent(event);
             });
@@ -542,12 +570,16 @@ export class CreationPage extends HTMLElement {
 
                 } catch (err) {
                     btn.disabled = false;
-                    btn.style.background = '#ef4444';
-                    btn.innerHTML = `<i class="material-icons-round">error</i> ${err.message}`;
-                    setTimeout(() => {
-                        btn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
-                        btn.innerHTML = originalHtml;
-                    }, 3000);
+                    btn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
+                    btn.innerHTML = originalHtml;
+                    const msg = (err && err.message) ? String(err.message) : '';
+                    let friendly = msg;
+                    if (msg.includes('upload') || msg.includes('S3') || msg.includes('network') || msg.includes('fetch') || msg.includes('Failed to fetch'))
+                        friendly = 'Échec de l\'upload des images. Vérifiez votre connexion.';
+                    else if (msg.includes('401') || msg.includes('Connectez') || msg.includes('authentif'))
+                        friendly = 'Session expirée. Reconnectez-vous.';
+                    else if (msg.length > 55) friendly = 'Une erreur est survenue. Réessayez.';
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: friendly, type: 'error' }, bubbles: true, composed: true }));
                 }
             });
         }
@@ -686,18 +718,18 @@ export class CreationPage extends HTMLElement {
         if (!selector) return;
         try {
             const { api } = await import('../../api.js');
-            const items = await api.getCategoriesFull();
+            const raw = await api.getCategoriesFull();
+            const items = Array.isArray(raw) ? raw.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99)) : [];
             const loading = selector.querySelector('#categoriesLoading');
             if (loading) loading.remove();
-            if (Array.isArray(items) && items.length > 0) {
+            if (items.length > 0) {
                 items.forEach((cat, idx) => {
                     const pill = document.createElement('filter-pill');
                     pill.setAttribute('icon', cat.icon || 'label');
                     pill.setAttribute('interactive', '');
-                    pill.setAttribute('text', cat.label);
+                    pill.setAttribute('text', cat.label || cat.slug || '');
                     pill.dataset.slug = cat.slug;
                     if (idx === 0) pill.setAttribute('active', 'true');
-                    // Exclusivité : désactiver les autres au clic
                     pill.addEventListener('click', () => {
                         selector.querySelectorAll('filter-pill').forEach(p => {
                             if (p !== pill) { p.removeAttribute('active'); p.classList.remove('active'); }

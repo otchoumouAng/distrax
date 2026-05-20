@@ -1,0 +1,16 @@
+{
+  "name": "distrax-image-processor",
+  "version": "1.0.0",
+  "description": "Lambda: resize and convert images from S3 originals/ to thumb/ and medium/ in WebP",
+  "main": "index.js",
+  "scripts": {
+    "zip": "npm install --production && cd node_modules && zip -r ../distrax-image-processor.zip . && cd .. && zip -u distrax-image-processor.zip index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.450.0",
+    "sharp": "^0.33.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,5 +1,14 @@
 export class Navbar extends HTMLElement {
     connectedCallback() {
+        this._focusDebounce = null;
+        this._onVisibilityChange = () => {
+            if (!document.hidden) this.refreshBadge();
+        };
+        this._onWindowFocus = () => {
+            if (this._focusDebounce) clearTimeout(this._focusDebounce);
+            this._focusDebounce = setTimeout(() => this.refreshBadge(), 200);
+        };
+
         this.innerHTML = `
             <style>
                 .notif-badge {
@@ -29,16 +38,26 @@ export class Navbar extends HTMLElement {
 
         this.setupEventListeners();
 
-        // 1er refresh : attendre un tout petit peu que l'auth soit établie
-        setTimeout(() => this.refreshBadge(), 800);
+        // Plusieurs passes : token / API parfois prêts après le 1er tick (évite badge absent sans F5)
+        this._scheduleBadgeRetries([0, 350, 900, 2000, 4000]);
 
-        // Polling toutes les 60s pour rester synchronisé (si l'app reste ouverte)
-        this._badgeInterval = setInterval(() => this.refreshBadge(), 60_000);
+        // Polling régulier pour voir les nouvelles notifs sans recharger la page
+        this._badgeInterval = setInterval(() => this.refreshBadge(), 25_000);
+
+        document.addEventListener('visibilitychange', this._onVisibilityChange);
+        window.addEventListener('focus', this._onWindowFocus);
     }
 
     disconnectedCallback() {
-        // Nettoyer le polling quand le composant est retiré du DOM
         if (this._badgeInterval) clearInterval(this._badgeInterval);
+        if (this._focusDebounce) clearTimeout(this._focusDebounce);
+        document.removeEventListener('visibilitychange', this._onVisibilityChange);
+        window.removeEventListener('focus', this._onWindowFocus);
+    }
+
+    /** Rafraîchit le badge à plusieurs intervalles (ex. après login ou au chargement). */
+    _scheduleBadgeRetries(delaysMs) {
+        delaysMs.forEach((ms) => setTimeout(() => this.refreshBadge(), ms));
     }
 
     setupEventListeners() {
@@ -69,10 +88,10 @@ export class Navbar extends HTMLElement {
         // Rafraîchir le badge sur demande explicite (ex: après markAllRead, desire-joined)
         window.addEventListener('refresh-notif-badge', () => this.refreshBadge());
 
-        // Rafraîchir dès que l'utilisateur se connecte
+        // Connexion / inscription : immédiat + relances (token déjà en localStorage après api.login)
         window.addEventListener('user-logged-in', () => {
-            // Petit délai pour que le token soit bien enregistré dans localStorage
-            setTimeout(() => this.refreshBadge(), 300);
+            this.refreshBadge();
+            this._scheduleBadgeRetries([400, 1500]);
         });
     }
 
@@ -97,9 +116,10 @@ export class Navbar extends HTMLElement {
                 return;
             }
             const count = await api.getNotificationCount();
-            this.updateBadge(count || 0);
+            const n = Number(count);
+            this.updateBadge(Number.isFinite(n) ? n : 0);
         } catch (_) {
-            // Silencieux — pas critique
+            /* Erreur réseau / 5xx : prochain poll ou visibilitychange rafraîchira */
         }
     }
 }

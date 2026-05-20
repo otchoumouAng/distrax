@@ -501,19 +501,23 @@ body.state-results .exploration-section {
 
     .floating-nav {
         top: auto;
-        bottom: 32px;
+        bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
         right: auto;
-        padding: 6px 12px;
-        gap: 12px;
+        padding: 4px 8px;
+        gap: 6px;
         background: var(--glass-bg);
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
     }
 
     .nav-btn {
-        width: 44px;
-        height: 44px;
+        width: 40px;
+        height: 40px;
+    }
+
+    .nav-btn i {
+        font-size: 22px;
     }
 
     .search-container.active~.floating-nav,
@@ -588,16 +592,6 @@ body.state-results .exploration-section {
 
     .header-title {
         font-size: 16px;
-    }
-
-    .edit-btn span {
-        display: none;
-    }
-
-    .edit-btn {
-        width: 44px;
-        padding: 0;
-        justify-content: center;
     }
 
     .page-footer {

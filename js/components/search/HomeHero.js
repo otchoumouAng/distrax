@@ -1,4 +1,5 @@
 import { TypewriterEffect } from '../animations.js';
+import { escapeHtml } from '../../utils/escapeHtml.js';
 
 export class HomeHero extends HTMLElement {
     constructor() {
@@ -7,6 +8,8 @@ export class HomeHero extends HTMLElement {
         this._scrollRaf = null;
         this._onScroll = null;
         this._onResize = null;
+        this._searchCategoriesLoaded = false;
+        this._searchCategoriesLoading = false;
         // The results mode state is handled via global custom events if needed,
         // but HomeHero mainly acts based on its local activation state.
     }
@@ -51,27 +54,8 @@ export class HomeHero extends HTMLElement {
 
                     <div class="suggestions-container" id="suggestionsContainer">
                         <div class="suggestions-header"><span class="suggestions-title"
-                                id="suggestionsTitle">Tendances</span></div>
-                        <div class="suggestions-grid" id="suggestionsGrid">
-                            <div class="suggestion-chip" data-value="Visiter Grand-Bassam"
-                                data-keywords="visite ville tourisme">
-                                <div class="chip-icon"><i class="material-icons-round">explore</i></div><span>Visiter
-                                    Grand-Bassam</span>
-                            </div>
-                            <div class="suggestion-chip" data-value="Partie de piscine à 5"
-                                data-keywords="piscine nager eau">
-                                <div class="chip-icon"><i class="material-icons-round">pool</i></div><span>Piscine entre
-                                    amis</span>
-                            </div>
-                            <div class="suggestion-chip" data-value="Boire un café" data-keywords="café boire discuter">
-                                <div class="chip-icon"><i class="material-icons-round">local_cafe</i></div><span>Boire un
-                                    café</span>
-                            </div>
-                            <div class="suggestion-chip" data-value="Apprendre l'espagnol"
-                                data-keywords="langue apprendre réviser">
-                                <div class="chip-icon"><i class="material-icons-round">translate</i></div><span>Apprendre
-                                    l'espagnol</span>
-                            </div>
+                                id="suggestionsTitle">Catégories</span></div>
+                        <div class="suggestions-grid" id="suggestionsGrid" aria-live="polite">
                         </div>
 
                         <div class="no-results" id="noResults" style="display: none;">
@@ -113,7 +97,7 @@ export class HomeHero extends HTMLElement {
             clearBtn: this.querySelector('#clearBtn'),
             submitBtn: this.querySelector('#submitBtn'),
             suggestionsContainer: this.querySelector('#suggestionsContainer'),
-            suggestionChips: this.querySelectorAll('.suggestion-chip'),
+            suggestionsGrid: this.querySelector('#suggestionsGrid'),
             scrollIndicator: this.querySelector('#scrollIndicator'),
             mobileBackBtn: this.querySelector('#mobileBackBtn'),
             noResults: this.querySelector('#noResults'),
@@ -174,18 +158,66 @@ export class HomeHero extends HTMLElement {
         setTimeout(() => this.typewriter.start(), 1000);
     }
 
+    _getSuggestionChips() {
+        return this.querySelectorAll('#suggestionsGrid .suggestion-chip');
+    }
+
+    _renderCategoryChips(categories) {
+        const grid = this.elements.suggestionsGrid;
+        if (!grid || !Array.isArray(categories) || categories.length === 0) return;
+        const html = categories.map((cat) => {
+            const slug = (typeof cat === 'object' ? cat.slug : cat) || '';
+            const label = (typeof cat === 'object' ? cat.label : null) || slug;
+            const icon = (typeof cat === 'object' ? cat.icon : null) || 'label';
+            const kw = `${slug} ${label}`.toLowerCase().replace(/"/g, '');
+            return `<div class="suggestion-chip category-suggestion-chip" role="button" tabindex="0" data-category="${escapeHtml(String(slug))}" data-keywords="${escapeHtml(kw)}">
+                <div class="chip-icon"><i class="material-icons-round">${escapeHtml(String(icon))}</i></div>
+                <span>${escapeHtml(String(label))}</span>
+            </div>`;
+        }).join('');
+        grid.innerHTML = html;
+    }
+
+    async _loadCategoriesForSearchPanel() {
+        const grid = this.elements.suggestionsGrid;
+        if (!grid) return;
+        if (this._searchCategoriesLoading) return;
+        this._searchCategoriesLoading = true;
+        grid.innerHTML = '<span class="categories-loading" style="display:flex;align-items:center;justify-content:center;padding:20px;color:var(--text-muted);font-size:14px;">Chargement des catégories…</span>';
+        try {
+            const { api } = await import('../../api.js');
+            const raw = await api.getCategoriesFull();
+            const items = Array.isArray(raw) ? raw.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99)) : [];
+            this._renderCategoryChips(items);
+            this._searchCategoriesLoaded = true;
+        } catch (_) {
+            this._renderCategoryChips([]);
+            this._searchCategoriesLoaded = true;
+        } finally {
+            this._searchCategoriesLoading = false;
+        }
+    }
+
     filterSuggestions(query) {
         const PREFIX = 'je veux';
         let term = query.toLowerCase().trim();
         if (term.startsWith(PREFIX)) term = term.substring(PREFIX.length).trim();
 
+        const chips = this._getSuggestionChips();
+        const loading = this.elements.suggestionsGrid?.querySelector('.categories-loading');
+        if (loading || chips.length === 0) {
+            if (this.elements.suggestionsTitle && !loading) {
+                this.elements.suggestionsTitle.textContent = term === '' ? 'Catégories' : `Filtrer : « ${query.replace(/^Je veux\s*/i, '').trim()} »`;
+            }
+            return;
+        }
+
         let visibleCount = 0;
-
-        this.elements.suggestionChips.forEach(chip => {
-            const value    = chip.getAttribute('data-value').toLowerCase();
-            const keywords = chip.getAttribute('data-keywords').toLowerCase();
-            const matches  = term === '' || value.includes(term) || keywords.includes(term);
-
+        chips.forEach((chip) => {
+            const slug = (chip.getAttribute('data-category') || '').toLowerCase();
+            const keywords = (chip.getAttribute('data-keywords') || '').toLowerCase();
+            const labelText = (chip.textContent || '').toLowerCase();
+            const matches = term === '' || slug.includes(term) || keywords.includes(term) || labelText.includes(term);
             if (matches) {
                 chip.classList.remove('filtered-out');
                 visibleCount++;
@@ -195,20 +227,20 @@ export class HomeHero extends HTMLElement {
         });
 
         if (visibleCount === 0 && term !== '') {
-            // Aucune suggestion locale — inviter l'utilisateur à valider sa saisie
             if (this.elements.noResults) {
                 this.elements.noResults.style.display = 'flex';
                 const titleEl = this.elements.noResults.querySelector('#noResultsTitle');
-                const hintEl  = this.elements.noResults.querySelector('#noResultsHint');
+                const hintEl = this.elements.noResults.querySelector('#noResultsHint');
                 if (titleEl) titleEl.textContent = `"${query.replace(/^Je veux\s*/i, '').trim()}"`;
-                if (hintEl)  hintEl.textContent  = 'Appuyez sur ↵ pour lancer la recherche';
+                if (hintEl) hintEl.textContent = 'Appuyez sur ↵ pour lancer la recherche';
             }
             if (this.elements.suggestionsTitle) this.elements.suggestionsTitle.style.opacity = '0';
         } else {
             if (this.elements.noResults) this.elements.noResults.style.display = 'none';
             if (this.elements.suggestionsTitle) {
                 this.elements.suggestionsTitle.style.opacity = '1';
-                this.elements.suggestionsTitle.textContent = term === '' ? 'Tendances' : `Résultats pour "${query.replace(/^Je veux\s*/i, '').trim()}"`;
+                this.elements.suggestionsTitle.textContent =
+                    term === '' ? 'Catégories' : `Catégories · « ${query.replace(/^Je veux\s*/i, '').trim()} »`;
             }
         }
     }
@@ -224,7 +256,17 @@ export class HomeHero extends HTMLElement {
             this.elements.searchInput.setAttribute('aria-expanded', 'true');
 
             this.elements.searchInput.focus();
-            this.filterSuggestions(this.elements.searchInput.value);
+            if (this.elements.suggestionsTitle) {
+                this.elements.suggestionsTitle.textContent = 'Catégories';
+                this.elements.suggestionsTitle.style.opacity = '1';
+            }
+            if (this._searchCategoriesLoaded && this._getSuggestionChips().length > 0) {
+                this.filterSuggestions(this.elements.searchInput.value);
+            } else {
+                this._loadCategoriesForSearchPanel().then(() => {
+                    if (this.isActive) this.filterSuggestions(this.elements.searchInput.value);
+                });
+            }
 
             this.dispatchEvent(new CustomEvent('search-activated', { bubbles: true, composed: true }));
         }
@@ -298,14 +340,32 @@ export class HomeHero extends HTMLElement {
             if (e.key === 'Escape') this.deactivateSearch(true);
         });
 
-        this.elements.suggestionChips.forEach(chip => {
-            chip.addEventListener('click', () => {
-                const val = chip.getAttribute('data-value');
+        this.elements.suggestionsGrid.addEventListener('click', (e) => {
+            const chip = e.target.closest('.suggestion-chip');
+            if (!chip || chip.classList.contains('filtered-out')) return;
+            const category = chip.getAttribute('data-category');
+            if (category) {
+                const categoryLabel = (chip.querySelector('span')?.textContent || category).trim();
+                document.dispatchEvent(new CustomEvent('apply-filters', {
+                    detail: {
+                        query: '',
+                        category,
+                        categoryLabel,
+                        commune: undefined,
+                        price_type: undefined,
+                    },
+                    bubbles: true,
+                    composed: true,
+                }));
+                this.deactivateSearch(true);
+                return;
+            }
+            const val = chip.getAttribute('data-value');
+            if (val) {
                 this.elements.searchInput.value = 'Je veux ' + val.charAt(0).toLowerCase() + val.slice(1);
                 this.updateActionButtons();
-                const icon = chip.querySelector('i').textContent;
-                setTimeout(() => this.submitSearch(icon), 100);
-            });
+                setTimeout(() => this.submitSearch('search'), 100);
+            }
         });
 
         this.elements.clearBtn.addEventListener('click', (e) => {
@@ -354,10 +414,6 @@ export class HomeHero extends HTMLElement {
         document.addEventListener('mousedown', closeOnOutsideClick);
         document.addEventListener('touchstart', closeOnOutsideClick, { passive: true });
 
-        // Listen to "edit-search" from ResultsHeader
-        window.addEventListener('edit-search', () => {
-            setTimeout(() => this.activateSearch(), 400);
-        });
     }
 }
 

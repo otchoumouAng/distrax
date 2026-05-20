@@ -65,7 +65,7 @@ export class LoginPage extends HTMLElement {
                         </div>
 
                         <div style="text-align: right; margin-top: -8px;">
-                            <a href="#" style="color: var(--primary); font-size: 13.5px; font-weight: 600; text-decoration: none;">Mot de passe oublié ?</a>
+                            <a href="#forgot-password" class="go-to-forgot-password" style="color: var(--primary); font-size: 13.5px; font-weight: 600; text-decoration: none;">Mot de passe oublié ?</a>
                         </div>
 
                         <button type="submit" style="background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; border: none; padding: 18px; border-radius: 16px; font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: all 0.2s; box-shadow: 0 8px 25px color-mix(in srgb, var(--primary) 40%, transparent); margin-top: 8px;">
@@ -100,6 +100,14 @@ export class LoginPage extends HTMLElement {
                 e.preventDefault();
                 const event = new CustomEvent('navigate-register', { bubbles: true, composed: true });
                 this.dispatchEvent(event);
+            });
+        }
+
+        const goToForgotPassword = this.querySelector('.go-to-forgot-password');
+        if (goToForgotPassword) {
+            goToForgotPassword.addEventListener('click', (e) => {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('navigate-forgot-password', { bubbles: true, composed: true }));
             });
         }
 

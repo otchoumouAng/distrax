@@ -1,4 +1,5 @@
-import { escapeHtml, safeUrl } from '../../utils/escapeHtml.js';
+import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
+import { resolveImageUrl } from '../../utils/imageUrl.js';
 
 export class ProfilePage extends HTMLElement {
     connectedCallback() {
@@ -19,7 +20,7 @@ export class ProfilePage extends HTMLElement {
                     <!-- Avatar + Nom -->
                     <div class="profile-hero">
                         <div class="profile-avatar-wrap">
-                            <img src="/assets/img/avatar.png" alt="Mon Profil" class="profile-avatar" id="avatarImage">
+                            <img src="${escapeHtml(DEFAULT_AVATAR_PATH)}" alt="Mon Profil" class="profile-avatar" id="avatarImage" data-fallback-avatar="${escapeHtml(DEFAULT_AVATAR_DATA_URI)}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
                             <button class="profile-avatar-edit" id="editAvatarBtn" aria-label="Modifier la photo">
                                 <i class="material-icons-round">edit</i>
                             </button>
@@ -258,7 +259,7 @@ export class ProfilePage extends HTMLElement {
             const subtitleEl = this.querySelector('#profileSubtitle');
 
             if (nameEl && user?.pseudo) nameEl.textContent = user.pseudo;
-            if (avatarImage && user?.avatar_url) avatarImage.src = user.avatar_url;
+            if (avatarImage && user?.avatar_url) avatarImage.src = resolveImageUrl(user.avatar_url) || DEFAULT_AVATAR_PATH;
             if (subtitleEl && user?.created_at) {
                 const joinDate = new Date(user.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
                 subtitleEl.textContent = `Membre depuis ${joinDate}`;
@@ -294,7 +295,7 @@ export class ProfilePage extends HTMLElement {
                         if (desire.price_type === 'contribution') priceStr = 'Contribution libre';
                         else if (desire.price_type === 'paid') priceStr = desire.price_amount ? desire.price_amount + ' FCFA' : 'Payant';
 
-                        const authorAvatar = safeUrl(user.avatar_url) || (user.avatar_url && user.avatar_url.startsWith('/') ? user.avatar_url : '') || '/assets/img/avatar.png';
+                        const authorAvatar = resolveImageUrl(user.avatar_url) || '/assets/img/avatar.png';
                         const hasActiveBoost = activeBoostIds.has(String(desire.id));
                         myDesiresList.innerHTML += `
                             <desire-card 
@@ -350,8 +351,7 @@ export class ProfilePage extends HTMLElement {
 
                         // Trouver l'auteur si disponible
                         const authorPseudo = desire.author?.pseudo || desire.author_pseudo || 'Organisateur';
-                        const authorAvatarRaw = desire.author?.avatar_url || desire.author_avatar || '/assets/img/avatar.png';
-                        const authorAvatarSafe = safeUrl(authorAvatarRaw) || (authorAvatarRaw.startsWith('/') ? authorAvatarRaw : '') || '/assets/img/avatar.png';
+                        const authorAvatarSafe = resolveImageUrl(desire.author?.avatar_url || desire.author_avatar) || DEFAULT_AVATAR_PATH;
 
                         joinedList.innerHTML += `
                             <desire-card 

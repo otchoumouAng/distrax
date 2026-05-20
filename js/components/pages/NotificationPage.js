@@ -20,8 +20,16 @@ export class NotificationPage extends HTMLElement {
                 </header>
 
                 <div class="page-content" style="padding: 24px;">
-                    <div id="notifList" class="notifications-list" style="display: flex; flex-direction: column; gap: 16px; max-width: 600px; margin: 0 auto;">
-                        <p style="color: var(--text-muted); text-align: center; padding: 40px 0;">Chargement...</p>
+                    <div id="notifContainer" style="max-width: 600px; margin: 0 auto;">
+                        <div id="notifList" class="notifications-list" style="display: flex; flex-direction: column; gap: 16px;">
+                            <p style="color: var(--text-muted); text-align: center; padding: 40px 0;">Chargement...</p>
+                        </div>
+                        <div id="notifLoadMore" class="notifications-load-more-wrap" style="display: none; text-align: center;">
+                            <button type="button" id="voirPlusNotifBtn" class="notifications-load-more-btn" aria-label="Charger plus de notifications">
+                                <i class="material-icons-round" aria-hidden="true">expand_more</i>
+                                <span class="notifications-load-more-label">Voir plus</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -45,8 +53,13 @@ export class NotificationPage extends HTMLElement {
                 const { api } = await import('../../api.js');
                 await api.markAllNotificationsRead().catch(() => { });
                 window.dispatchEvent(new CustomEvent('refresh-notif-badge'));
-                this.loadNotifications();
+                this.loadNotifications(false);
             });
+        }
+
+        const voirPlusBtn = this.querySelector('#voirPlusNotifBtn');
+        if (voirPlusBtn) {
+            voirPlusBtn.addEventListener('click', () => this.loadNotifications(true));
         }
     }
 
@@ -61,30 +74,60 @@ export class NotificationPage extends HTMLElement {
         return types[type] || { icon: 'notifications', color: 'var(--primary)' };
     }
 
-    async loadNotifications() {
+    /** @param {boolean} [append=false] — true = charger 10 de plus et les ajouter à la liste */
+    async loadNotifications(append = false) {
         const list = this.querySelector('#notifList');
+        const loadMoreWrap = this.querySelector('#notifLoadMore');
+        const voirPlusBtn = this.querySelector('#voirPlusNotifBtn');
+        const PAGE_SIZE = 10;
+
+        if (!append) {
+            this._notifItems = [];
+            this._notifOffset = 0;
+            this._notifTotal = 0;
+        }
+
         try {
             const { api } = await import('../../api.js');
             if (!api.isAuthenticated()) {
                 list.innerHTML = `<p style="color: var(--text-muted); text-align: center; padding: 40px 0;">Connectez-vous pour voir vos notifications.</p>`;
+                if (loadMoreWrap) loadMoreWrap.style.display = 'none';
                 return;
             }
 
-            const notifs = await api.getNotifications();
+            if (!append) {
+                list.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px 0;">Chargement...</p>';
+                if (loadMoreWrap) loadMoreWrap.style.display = 'none';
+            } else if (voirPlusBtn) {
+                voirPlusBtn.disabled = true;
+                const label = voirPlusBtn.querySelector('.notifications-load-more-label');
+                if (label) label.textContent = 'Chargement…';
+                else voirPlusBtn.textContent = 'Chargement…';
+            }
 
-            if (!notifs || notifs.length === 0) {
+            const data = await api.getNotifications(PAGE_SIZE, this._notifOffset ?? 0);
+            const notifs = data?.items ?? [];
+            const total = data?.total ?? 0;
+
+            if (!append && (!notifs || notifs.length === 0)) {
                 list.innerHTML = `
                     <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
                         <i class="material-icons-round" style="font-size: 48px; opacity: 0.3; display: block; margin-bottom: 12px;">notifications_none</i>
                         <p>Aucune notification pour le moment.</p>
                     </div>`;
+                if (loadMoreWrap) loadMoreWrap.style.display = 'none';
                 return;
             }
+
+            this._notifItems = this._notifItems || [];
+            this._notifItems.push(...notifs);
+            this._notifOffset = (this._notifOffset ?? 0) + notifs.length;
+            this._notifTotal = total;
 
             // Formate un numéro pour wa.me : retire symboles, gère code pays CI (0XXXXXXXXX → 225XXXXXXXXX)
             const waPhone = (p) => p.replace(/[^\d+]/g, '').replace(/^\+/, '').replace(/^0/, '225');
 
-            list.innerHTML = notifs.map(n => {
+            list.innerHTML = this._notifItems.map(n => {
                 const meta = this._notifMeta(n.type);
                 const phone = n.extra_data?.creator_phone;
                 const hostName = n.extra_data?.creator_pseudo || 'l\'organisateur';
@@ -163,8 +206,23 @@ export class NotificationPage extends HTMLElement {
                 });
             });
 
+            // Afficher "Voir plus" s'il reste des notifications à charger
+            if (loadMoreWrap) {
+                loadMoreWrap.style.display = (this._notifItems.length < this._notifTotal) ? 'block' : 'none';
+            }
+            if (voirPlusBtn) {
+                voirPlusBtn.disabled = false;
+                const lbl = voirPlusBtn.querySelector('.notifications-load-more-label');
+                if (lbl) lbl.textContent = 'Voir plus';
+            }
         } catch (err) {
             list.innerHTML = `<p style="color: var(--text-muted); text-align: center;">Impossible de charger les notifications.</p>`;
+            if (loadMoreWrap) loadMoreWrap.style.display = 'none';
+            if (voirPlusBtn) {
+                voirPlusBtn.disabled = false;
+                const lbl = voirPlusBtn.querySelector('.notifications-load-more-label');
+                if (lbl) lbl.textContent = 'Voir plus';
+            }
         }
     }
 

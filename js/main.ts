@@ -11,7 +11,7 @@ import { escapeHtml } from './utils/escapeHtml.js';
 import * as sessionManager from './utils/sessionManager.js';
 
 // Pages accessibles sans être connecté
-const PUBLIC_PAGES = new Set(['home', 'results', 'login', 'register']);
+const PUBLIC_PAGES = new Set(['home', 'results', 'login', 'register', 'forgot-password', 'reset-password']);
 
 // 3. IMPORT DES WEB COMPONENTS
 // Ces imports enregistrent les Custom Elements via customElements.define()
@@ -30,6 +30,8 @@ import './components/pages/ProfilePage.js';
 import './components/pages/DesireDetailsPage.js';
 import './components/pages/LoginPage.js';
 import './components/pages/RegisterPage.js';
+import './components/pages/ForgotPasswordPage.js';
+import './components/pages/ResetPasswordPage.js';
 import './components/pages/BoostPage.js';
 import './components/pages/BoostDetailsPage.js';
 
@@ -79,6 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginPage = get<any>('app-login-page');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const registerPage = get<any>('app-register-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const forgotPasswordPage = get<any>('app-forgot-password-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const resetPasswordPage = get<any>('app-reset-password-page');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const boostPage = get<any>('app-boost-page');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,6 +151,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (profilePage?.hide) profilePage.hide();
         if (loginPage?.hide) loginPage.hide();
         if (registerPage?.hide) registerPage.hide();
+        if (forgotPasswordPage?.hide) forgotPasswordPage.hide();
+        if (resetPasswordPage?.hide) resetPasswordPage.hide();
         if (boostPage?.hide) boostPage.hide();
 
         // Afficher la page demandée
@@ -201,6 +209,14 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'register':
                 hide(navbar);
                 if (registerPage?.show) registerPage.show();
+                break;
+            case 'forgot-password':
+                hide(navbar);
+                if (forgotPasswordPage?.show) forgotPasswordPage.show();
+                break;
+            case 'reset-password':
+                hide(navbar);
+                if (resetPasswordPage?.show) resetPasswordPage.show();
                 break;
             case 'boost':
                 hide(navbar);
@@ -259,7 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Initialisation — attendre que les WC soient enregistrés
-    const initialHash = window.location.hash.replace('#', '') || 'home';
+    const hashRaw = window.location.hash.replace('#', '') || 'home';
+    const initialHash = hashRaw.split('?')[0] || hashRaw;
     history.replaceState({ page: initialHash }, '', window.location.hash || '#home');
     _currentPageId = initialHash || 'home';
 
@@ -275,13 +292,17 @@ document.addEventListener('DOMContentLoaded', () => {
             ? (_desireIdFromLink ? 'home' : initialHash)
             : (api.isAuthenticated() ? initialHash : 'login');
         navigateTo(targetPage, false);
+        if (_desireIdFromLink) {
+            history.replaceState({ page: 'home' }, '', '#home');
+        }
         if (api.isAuthenticated()) {
             sessionManager.start(); // déjà connecté → démarrer le timer
         }
 
-        // Ouvrir l'overlay de détails si c'est un lien partagé
+        // Ouvrir l'overlay de détails si c'est un lien partagé (et pousser un état pour que "retour" ferme l'overlay)
         if (_desireIdFromLink) {
             setTimeout(() => {
+                history.pushState({ page: 'home', overlay: true }, '', '#home');
                 desireDetailsPage?.open?.({ id: _desireIdFromLink });
             }, 150);
         }
@@ -312,12 +333,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Événements de navigation émis par les composants
-    window.addEventListener('navigate-home', () => guardedNavigate('home'));
+    window.addEventListener('navigate-home', () => navigateTo('home'));
     window.addEventListener('navigate-notifications', () => guardedNavigate('notifications'));
     window.addEventListener('navigate-creation', () => guardedNavigate('creation'));
     window.addEventListener('navigate-profile', () => guardedNavigate('profile'));
     window.addEventListener('navigate-login', () => navigateTo('login'));   // public
     window.addEventListener('navigate-register', () => navigateTo('register')); // public
+    window.addEventListener('navigate-forgot-password', () => navigateTo('forgot-password'));
+    window.addEventListener('navigate-reset-password', () => navigateTo('reset-password'));
     window.addEventListener('auth-required', () => navigateTo('login'));  // 401 → redirection login
     window.addEventListener('navigate-boost', async (e) => {
         try {
@@ -343,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
             expl._loading = false;
             expl.loadDesires?.();
         }
+        window.dispatchEvent(new CustomEvent('refresh-notif-badge'));
     });
 
     // Déconnexion après inactivité : naviguer vers login avec pré-remplissage
@@ -389,6 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (navbar) {
             navbar.style.display = _currentPageId === 'home' ? 'flex' : 'none';
         }
+        window.dispatchEvent(new CustomEvent('refresh-notif-badge'));
     });
 
     // Recherche
@@ -402,8 +427,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Filtres appliqués depuis la modale → afficher les résultats avec les critères
-    window.addEventListener('apply-filters', (e) => {
+    // Filtres (modale, recherche catégories…) — émis sur document dans les composants
+    document.addEventListener('apply-filters', (e) => {
         const detail = (e as CustomEvent).detail || {};
         document.body.classList.add('state-results');
         navigateTo('results');
@@ -414,6 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 category: detail.category
             });
         }
+        setTimeout(() => explorationSection?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
 
     window.addEventListener('scroll-to-explore', () => {
@@ -429,6 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 'desire-view' = simple visualisation (bouton Voir sur cartes owner/joined) — PAS de toast
     window.addEventListener('desire-view', (e) => {
         desireDetailsPage?.open?.((e as CustomEvent).detail);
+        history.pushState({ page: _currentPageId, overlay: true }, '', `#${_currentPageId}`);
     });
 
     // 'profile-refresh' = quitter une envie depuis une carte → mettre à jour le profil

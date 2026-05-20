@@ -1,8 +1,9 @@
-import { escapeHtml, safeUrl } from '../../utils/escapeHtml.js';
+import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
+import { resolveImageUrl, getImageVariantUrl } from '../../utils/imageUrl.js';
 
 export class DesireCard extends HTMLElement {
     static get observedAttributes() {
-        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted'];
+        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count'];
     }
 
     connectedCallback() {
@@ -20,8 +21,8 @@ export class DesireCard extends HTMLElement {
         const title = escapeHtml(this.getAttribute('title') || 'Titre par défaut');
         const author = escapeHtml(this.getAttribute('author') || 'Anonyme');
         const timeAgo = escapeHtml(this.getAttribute('time-ago') || 'À l\'instant');
-        const avatarRaw = this.getAttribute('avatar') || '/assets/img/avatar.png';
-        const avatar = safeUrl(avatarRaw) || (avatarRaw.startsWith('/') ? avatarRaw : '');
+        const avatarRaw = this.getAttribute('avatar') || DEFAULT_AVATAR_PATH;
+        const avatar = resolveImageUrl(avatarRaw) || DEFAULT_AVATAR_PATH;
         const date = escapeHtml(this.getAttribute('date') || 'Maintenant');
         const price = escapeHtml(this.getAttribute('price') || 'Gratuit');
         const spots = escapeHtml(this.getAttribute('spots') || '');
@@ -34,13 +35,16 @@ export class DesireCard extends HTMLElement {
         if (imagesAttr) {
             imagesArray = imagesAttr.split(',').map(img => img.trim()).filter(Boolean);
         }
-        const firstImageUrl = imagesArray.length > 0 ? (safeUrl(imagesArray[0]) || '') : '';
+        const firstImageCanonical = imagesArray.length > 0 ? (resolveImageUrl(imagesArray[0]) || '') : '';
+        const firstImageVariant = firstImageCanonical ? (getImageVariantUrl(firstImageCanonical, 'medium') || firstImageCanonical) : '';
+        const firstImageFallback = firstImageCanonical || '';
 
         // Convert attributes into HTML elements (user content already escaped)
         const spotsHtml = spots ? `<span class="spots-left">${spots}</span>` : '';
+        const avatarFallback = escapeHtml(DEFAULT_AVATAR_DATA_URI);
         const avatarsStackHtml = `
             <div class="avatars-stack">
-                <img src="${escapeHtml(avatar || '/assets/img/avatar.png')}" alt="${author}" class="user-avatar">
+                <img src="${escapeHtml(avatar || DEFAULT_AVATAR_PATH)}" alt="${author}" class="user-avatar" data-fallback-avatar="${avatarFallback}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
             </div>
         `;
 
@@ -50,7 +54,12 @@ export class DesireCard extends HTMLElement {
         if (dateLower.includes('maintenant')) dateIcon = 'flash_on';
         if (dateLower.includes('après-midi') || dateLower.includes('heure')) dateIcon = 'schedule';
 
-        const imageHtml = firstImageUrl ? `<div class="card-image" style="background-image: url('${escapeHtml(firstImageUrl)}');"></div>` : '';
+        const imageHtml = firstImageVariant
+            ? `<div class="card-image"><img src="${escapeHtml(firstImageVariant)}" alt="" class="card-image-img" data-fallback="${escapeHtml(firstImageFallback)}" onerror="this.onerror=null;if(this.dataset.fallback)this.src=this.dataset.fallback"></div>`
+            : '';
+
+        const viewCount = this.getAttribute('view-count');
+        const viewCountHtml = (viewCount != null && viewCount !== '') ? `<span class="meta-tag"><i class="material-icons-round">visibility</i> ${escapeHtml(String(Number(viewCount).toLocaleString('fr-FR')))} vues</span>` : '';
 
         const mode = this.getAttribute('mode') || 'default';
         const desireId = this.getAttribute('desire-id');
@@ -119,7 +128,7 @@ export class DesireCard extends HTMLElement {
                 ${sponsoredBadgeHtml}
                 <div class="card-header">
                     <div class="user-info">
-                        <img src="${avatar}" alt="${author}" class="user-avatar">
+                        <img src="${avatar || DEFAULT_AVATAR_PATH}" alt="${author}" class="user-avatar" data-fallback-avatar="${avatarFallback}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
                         <div class="user-details">
                             <h3>${author}</h3><span>${timeAgo}</span>
                         </div>
@@ -132,6 +141,7 @@ export class DesireCard extends HTMLElement {
                         <span class="meta-tag"><i class="material-icons-round">location_on</i> ${commune}</span>
                         <span class="meta-tag"><i class="material-icons-round">${dateIcon}</i> ${date}</span>
                         <span class="meta-tag"><i class="material-icons-round">${priceIcon}</i> ${price}</span>
+                        ${viewCountHtml}
                     </div>
                 </div>
                 <div class="card-footer">
@@ -164,7 +174,7 @@ export class DesireCard extends HTMLElement {
                         date:        this.getAttribute('date')     || '',
                         spots:       this.getAttribute('spots')    || '',
                         price:       this.getAttribute('price')    || '',
-                        avatar:      this.getAttribute('avatar')   || '/assets/img/avatar.png',
+                        avatar:      this.getAttribute('avatar')   || DEFAULT_AVATAR_PATH,
                         images:      imagesArray,
                         description: this.getAttribute('description') || '',
                     },
@@ -227,7 +237,7 @@ export class DesireCard extends HTMLElement {
                         date:        this.getAttribute('date')     || '',
                         spots:       this.getAttribute('spots')    || '',
                         price:       this.getAttribute('price')    || '',
-                        avatar:      this.getAttribute('avatar')   || '/assets/img/avatar.png',
+                        avatar:      this.getAttribute('avatar')   || DEFAULT_AVATAR_PATH,
                         images:      imagesArray,
                         description: this.getAttribute('description') || '',
                     },

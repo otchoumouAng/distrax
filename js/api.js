@@ -102,6 +102,35 @@ export const api = {
         removeToken();
     },
 
+    /**
+     * Mot de passe oublié : POST /auth/forgot-password
+     * @param {string} phone - Numéro de téléphone du compte
+     * @returns {Promise<{message?: string}>}
+     */
+    async forgotPassword(phone) {
+        const res = await fetch(`${BASE_URL}/auth/forgot-password`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify({ phone: String(phone).trim() }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * Réinitialisation du mot de passe : POST /auth/reset-password
+     * @param {string} token - Token reçu par lien ou SMS
+     * @param {string} new_password - Nouveau mot de passe
+     * @returns {Promise<{message?: string}>}
+     */
+    async resetPassword(token, new_password) {
+        const res = await fetch(`${BASE_URL}/auth/reset-password`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify({ token: String(token).trim(), new_password: String(new_password) }),
+        });
+        return handleResponse(res);
+    },
+
     isAuthenticated,
 
     // ── Utilisateur courant ─────────────────────────────────────
@@ -179,6 +208,19 @@ export const api = {
             headers: buildHeaders(),
         });
         return handleResponse(res);
+    },
+
+    /**
+     * POST /desires/:id/view — Enregistre une vue sur une envie (comptage)
+     * Appel fire-and-forget recommandé pour ne pas bloquer l'affichage.
+     */
+    async recordDesireView(id) {
+        const res = await fetch(`${BASE_URL}/desires/${id}/view`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
+        if (!res.ok) return;
+        return res.json().catch(() => null);
     },
 
     /**
@@ -418,11 +460,14 @@ export const api = {
     // ── Notifications ────────────────────────────────────────────
 
     /**
-     * GET /notifications — Liste des notifications de l'utilisateur [auth]
-     * @returns {Promise<Array<{id, type, body, is_read, created_at, data}>>}
+     * GET /notifications — Liste paginée des notifications de l'utilisateur [auth]
+     * @param {number} [limit=10] — Nombre de notifications à retourner
+     * @param {number} [offset=0] — Décalage pour la pagination
+     * @returns {Promise<{ items: Array<{id, type, body, is_read, created_at, ...}>, total: number }>}
      */
-    async getNotifications() {
-        const res = await fetch(`${BASE_URL}/notifications`, {
+    async getNotifications(limit = 10, offset = 0) {
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+        const res = await fetch(`${BASE_URL}/notifications?${params}`, {
             headers: buildHeaders(),
         });
         return handleResponse(res);
@@ -479,21 +524,33 @@ export const api = {
     },
 
     /**
-     * Uploade directement un fichier vers S3 et retourne l'URL publique
-     * @param {File} file - Fichier à uploader
+     * Notifie l'API qu'un fichier a été uploadé sur S3 (enqueue le job de conversion thumb/medium).
+     * @param {string} fileUrl - URL publique du fichier (ex. retournée par uploadToS3)
+     */
+    async notifyImageUploaded(fileUrl) {
+        const res = await fetch(`${BASE_URL}/upload/notify`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify({ file_url: fileUrl })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `Notify failed ${res.status}`);
+        }
+        return res.json();
+    },
+
+    /**
+     * Uploade directement un fichier vers S3 et retourne l'URL publique.
+     * Après upload, notifie l'API pour enqueue le traitement asynchrone (thumb + medium).
      */
     async uploadToS3(file) {
-        // Demande de l'URL d'upload
         const presignedData = await this.getPresignedUrl(file.name, file.type);
 
-        // Upload direct vers AWS S3
         const uploadRes = await fetch(presignedData.upload_url, {
             method: 'PUT',
             body: file,
-            headers: {
-                // Must explicitly set Content-Type if we sent it in the presigned URL request!
-                'Content-Type': file.type
-            }
+            headers: { 'Content-Type': file.type }
         });
 
         if (!uploadRes.ok) {
@@ -502,7 +559,12 @@ export const api = {
             throw new Error(`S3 Error ${uploadRes.status}: ${errorText || 'Unknown error'}`);
         }
 
-        // Renvoie l'URL de lecture du fichier
+        try {
+            await this.notifyImageUploaded(presignedData.file_url);
+        } catch (e) {
+            console.warn('Upload notify failed (image will show as original until worker runs):', e);
+        }
+
         return presignedData.file_url;
     }
 };

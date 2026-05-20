@@ -1,3 +1,5 @@
+import { DEFAULT_AVATAR_PATH } from '../../utils/escapeHtml.js';
+
 /**
  * ExplorationSection — Affiche les dernières envies depuis l'API.
  * Gère le filtrage par catégorie (filter-pills) et la pagination infinie.
@@ -20,7 +22,7 @@ export class ExplorationSection extends HTMLElement {
         this.innerHTML = `
             <section class="exploration-section" id="explorationSection">
                 <div class="exploration-header">
-                    <h2 class="exploration-title">Dernières envies autour de vous</h2>
+                    <h2 class="exploration-title" id="explorationTitle">Dernières envies autour de vous</h2>
                 </div>
 
                 <!-- Sentinelle pour sticky -->
@@ -92,6 +94,22 @@ export class ExplorationSection extends HTMLElement {
         return map[cat] || 'explore';
     }
 
+    /** Aligne les pills « Tous / catégories » avec _activeCategory (ex. après clic depuis la recherche). */
+    _syncCategoryPillsUi() {
+        const filtersContainer = this.querySelector('#explorationFilters');
+        if (!filtersContainer) return;
+        filtersContainer.querySelectorAll('.category-pill').forEach((p) => {
+            const cat = p.dataset.category ?? '';
+            const isTous = cat === '';
+            const match = (isTous && !this._activeCategory) || (cat === this._activeCategory);
+            if (match) p.setAttribute('active', '');
+            else p.removeAttribute('active');
+        });
+        const rencontresPill = filtersContainer.querySelector('[data-category="rencontres"]');
+        const rencontresActive = rencontresPill?.hasAttribute('active');
+        document.documentElement.setAttribute('data-theme', rencontresActive ? 'dark' : 'light');
+    }
+
     _formatDate(iso) {
         if (!iso) return 'Date à confirmer';
         const d = new Date(iso);
@@ -133,7 +151,7 @@ export class ExplorationSection extends HTMLElement {
             card.setAttribute('title', d.title);
             card.setAttribute('author', d.author_pseudo || 'Anonyme');
             card.setAttribute('time-ago', this._timeAgo(d.created_at));
-            card.setAttribute('avatar', d.author_avatar_url || '/assets/img/avatar.png');
+            card.setAttribute('avatar', d.author_avatar_url || DEFAULT_AVATAR_PATH);
             card.setAttribute('date', this._formatDate(d.event_date));
             card.setAttribute('price', this._formatPrice(d));
             card.setAttribute('commune', d.commune || 'Abidjan');
@@ -141,6 +159,7 @@ export class ExplorationSection extends HTMLElement {
             card.setAttribute('btn-text', 'Rejoindre');
             card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
             card.setAttribute('description', d.description || '');
+            if (d.view_count != null) card.setAttribute('view-count', String(d.view_count));
             card.dataset.desireId = d.id;
             card.setAttribute('desire-id', d.id); // requis par getAttribute('desire-id') dans DesireCard
             card.dataset.authorId = d.author_id || ''; // pour que desire-view l'inclue
@@ -167,7 +186,7 @@ export class ExplorationSection extends HTMLElement {
                         date: this._formatDate(d.event_date),
                         spots: `${d.spots_taken}/${d.max_spots} places`,
                         price: this._formatPrice(d),
-                        avatar: d.author_avatar_url || '/assets/img/avatar.png',
+                        avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH,
                         images: d.images || [],
                         description: d.description || '',
                         price_type: d.price_type,
@@ -244,6 +263,9 @@ export class ExplorationSection extends HTMLElement {
         if (!append) {
             this._currentPage = 1;
             this._hasMore = true;
+            const hasFilters = this._activeFilters.query || this._activeFilters.commune || this._activeFilters.price_type || this._activeCategory;
+            const titleEl = this.querySelector('#explorationTitle');
+            if (titleEl) titleEl.textContent = hasFilters ? 'Résultats' : 'Dernières envies autour de vous';
         }
         this._updateLoadMoreUi();
 
@@ -267,7 +289,7 @@ export class ExplorationSection extends HTMLElement {
             filters.size = this._pageSize;
 
             const data = await api.fetchDesires(filters);
-            const { items: desires, hasMore } = this._extractPagedItems(data);
+            let { items: desires, hasMore } = this._extractPagedItems(data);
             this._hasMore = hasMore;
 
             if (append) {
@@ -366,7 +388,7 @@ export class ExplorationSection extends HTMLElement {
                     filtersContainer.querySelectorAll('.category-pill').forEach(p => {
                         if (p !== pill) p.removeAttribute('active');
                     });
-                    this._activeCategory = category;
+                    this._activeCategory = (category && category !== '') ? category : null;
                 } else {
                     this._activeCategory = null;
                 }
@@ -380,6 +402,18 @@ export class ExplorationSection extends HTMLElement {
                     document.documentElement.setAttribute('data-theme', rencontresActive ? 'dark' : 'light');
                 }
 
+                if (document.body.classList.contains('state-results')) {
+                    let headerTitle = 'Tous';
+                    if (this._activeCategory) {
+                        const activePill = filtersContainer.querySelector('.category-pill[active]');
+                        headerTitle = activePill?.dataset?.label || this._activeCategory;
+                    }
+                    window.dispatchEvent(new CustomEvent('results-header-title', {
+                        detail: { title: headerTitle },
+                        bubbles: true,
+                    }));
+                }
+
                 this.loadDesires();
             });
         }
@@ -387,7 +421,7 @@ export class ExplorationSection extends HTMLElement {
         // Charger plus
         this.querySelector('#loadMoreBtn')?.addEventListener('click', () => this.loadDesires(true));
 
-        // Filtres appliqués depuis la modale
+        // Filtres (modale, clic catégorie depuis la recherche, etc.)
         document.addEventListener('apply-filters', (e) => {
             const d = e.detail || {};
             this._activeFilters = {
@@ -395,6 +429,21 @@ export class ExplorationSection extends HTMLElement {
                 commune: d.commune || undefined,
                 price_type: d.price_type || undefined
             };
+            if (d.category !== undefined && d.category !== null && String(d.category).trim() !== '') {
+                this._activeCategory = String(d.category).trim();
+            } else if (d.category === null || d.category === '') {
+                this._activeCategory = null;
+            }
+            this._syncCategoryPillsUi();
+            this._loading = false;
+            if (d.category !== undefined && String(d.category || '').trim() !== '') {
+                const activePill = this.querySelector('#explorationFilters .category-pill[active]');
+                const headerLabel = activePill?.dataset?.label || d.categoryLabel || d.category;
+                window.dispatchEvent(new CustomEvent('results-header-title', {
+                    detail: { title: headerLabel },
+                    bubbles: true,
+                }));
+            }
             this.loadDesires();
         });
     }
@@ -407,37 +456,53 @@ export class ExplorationSection extends HTMLElement {
 
         try {
             const { api } = await import('../../api.js');
-            const items = await api.getCategoriesFull();
+            const raw = await api.getCategoriesFull();
             if (loading) loading.remove();
-            if (Array.isArray(items) && items.length > 0) {
-                items.forEach(cat => {
-                    const pill = document.createElement('filter-pill');
-                    pill.setAttribute('icon', cat.icon || 'label');
-                    pill.setAttribute('interactive', '');
-                    pill.classList.add('category-pill');
-                    pill.dataset.category = cat.slug;
-                    pill.textContent = cat.label;
-                    // Insert before the divider
-                    container.insertBefore(pill, divider);
-                });
-            }
+            const list = Array.isArray(raw) ? raw.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99)) : [];
+            const tousPill = document.createElement('filter-pill');
+            tousPill.setAttribute('icon', 'apps');
+            tousPill.setAttribute('interactive', '');
+            tousPill.classList.add('category-pill', 'pill-tous');
+            tousPill.dataset.category = '';
+            tousPill.textContent = 'Tous';
+            if (!this._activeCategory) tousPill.setAttribute('active', '');
+            container.insertBefore(tousPill, divider);
+
+            list.forEach((cat) => {
+                const slug = (typeof cat === 'object' ? cat.slug : cat) || '';
+                const icon = (typeof cat === 'object' ? cat.icon : null) || 'label';
+                const label = (typeof cat === 'object' ? cat.label : null) || slug;
+                const pill = document.createElement('filter-pill');
+                pill.setAttribute('icon', icon || 'label');
+                pill.setAttribute('interactive', '');
+                pill.classList.add('category-pill');
+                pill.dataset.category = slug;
+                pill.dataset.label = label;
+                pill.textContent = label;
+                if (this._activeCategory === slug) pill.setAttribute('active', '');
+                container.insertBefore(pill, divider);
+            });
         } catch (e) {
             console.warn('[ExplorationSection] Catégories non chargées:', e.message);
             if (loading) loading.remove();
-            // Fallback statique avec les slugs corrects
-            const fallback = [
-                { slug: 'sport', icon: 'sports_soccer', label: 'Sport' },
-                { slug: 'decouverte', icon: 'explore', label: 'Découverte' },
-                { slug: 'apprentissage', icon: 'school', label: 'Apprendre' },
-                { slug: 'rencontres', icon: 'people', label: 'Rencontres' },
-            ];
-            fallback.forEach(cat => {
+            const list = [];
+            const tousPill = document.createElement('filter-pill');
+            tousPill.setAttribute('icon', 'apps');
+            tousPill.setAttribute('interactive', '');
+            tousPill.classList.add('category-pill', 'pill-tous');
+            tousPill.dataset.category = '';
+            tousPill.textContent = 'Tous';
+            if (!this._activeCategory) tousPill.setAttribute('active', '');
+            container.insertBefore(tousPill, divider);
+            list.forEach((cat) => {
                 const pill = document.createElement('filter-pill');
                 pill.setAttribute('icon', cat.icon);
                 pill.setAttribute('interactive', '');
                 pill.classList.add('category-pill');
                 pill.dataset.category = cat.slug;
+                pill.dataset.label = cat.label;
                 pill.textContent = cat.label;
+                if (this._activeCategory === cat.slug) pill.setAttribute('active', '');
                 container.insertBefore(pill, divider);
             });
         }

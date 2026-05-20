@@ -139,13 +139,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
 CORS_ORIGINS=https://dystrax.com,https://www.dystrax.com
 
-# AWS S3 (upload d'images)
-AWS_REGION=eu-west-1
+# AWS S3 (upload d'images — clés sous originals/ pour déclencher la Lambda)
+AWS_REGION=eu-north-1
 AWS_ACCESS_KEY_ID=<votre clé>
 AWS_SECRET_ACCESS_KEY=<votre secret>
-S3_BUCKET_NAME=dystrax-uploads
+S3_BUCKET_NAME=distrax-desires-images-prod
 
 ```
+
+> **Optimisation images** : les uploads sont stockés sous le préfixe `originals/`. Une Lambda (voir [Configuration des services](configuration-services.md#3-lambda--optimisation-des-images-thumb--medium-webp)) génère les variantes thumb et medium en WebP. Le frontend charge ces variantes pour les listes et le détail.
 
 Générer une `SECRET_KEY` sécurisée :
 
@@ -206,7 +208,42 @@ sudo systemctl start dystrax-api
 sudo systemctl status dystrax-api
 ```
 
-### 3.7 Nginx — Configuration du reverse proxy pour l'API
+### 3.7 Worker images (traitement asynchrone thumb/medium)
+
+Le worker traite la file `image_jobs` (une image à la fois) après chaque upload S3. Même serveur, même venv.
+
+```bash
+sudo nano /etc/systemd/system/dystrax-worker.service
+```
+
+```ini
+[Unit]
+Description=Dystrax image worker (thumb + medium WebP)
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/dystrax-api
+ExecStart=/var/www/dystrax-api/venv/bin/python scripts/worker_image.py
+Restart=always
+RestartSec=10
+Environment="PATH=/var/www/dystrax-api/venv/bin"
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable dystrax-worker
+sudo systemctl start dystrax-worker
+sudo systemctl status dystrax-worker
+```
+
+> Appliquer la migration `sql/15_image_jobs.sql` avant de lancer le worker (`python scripts/setup_db.py`).
+
+### 3.8 Nginx — Configuration du reverse proxy pour l'API
 
 ```bash
 sudo nano /etc/nginx/sites-available/dystrax-api
@@ -244,7 +281,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 3.8 SSL — Certificat pour api.dystrax.com
+### 3.9 SSL — Certificat pour api.dystrax.com
 
 Vérifier que `api.dystrax.com` pointe vers `<IP_SERVEUR>` dans le DNS, puis :
 

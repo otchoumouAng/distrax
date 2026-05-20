@@ -4,7 +4,7 @@ Fichiers servis à la racine sous `/assets/` (Vite `public/`).
 
 ## Fichiers requis
 
-- **img/avatar.png** — Image par défaut pour les avatars utilisateur (référencée par l’app et les fallbacks).
+- **img/avatar.svg** (par défaut ; optionnel : **img/avatar.png** pour remplacer) — Image par défaut pour les avatars utilisateur (référencée par l’app et les fallbacks).
 - **icons/icon-192.png** — Icône 192×192 px (PWA / notifications, utilisé par `firebase-messaging-sw.js` pour Dystrax).
 - **icons/badge-72.png** — Badge 72×72 px (notifications, utilisé par le service worker).
 

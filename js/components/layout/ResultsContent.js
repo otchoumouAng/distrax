@@ -1,4 +1,4 @@
-import { escapeHtml } from '../../utils/escapeHtml.js';
+import { escapeHtml, DEFAULT_AVATAR_PATH } from '../../utils/escapeHtml.js';
 
 export class ResultsContent extends HTMLElement {
     constructor() {
@@ -22,21 +22,28 @@ export class ResultsContent extends HTMLElement {
                     ${this._skeleton()}
                 </div>
 
-                <!-- CTA Créer une envie -->
-                <div class="results-cta" id="resultsCta" style="display: none;">
-                    <div class="cta-content">
-                        <div class="cta-icon"><i class="material-icons-round">campaign</i></div>
-                        <div class="cta-text">
-                            <h3>Vous ne trouvez pas votre bonheur ?</h3>
-                            <p>Proposez votre propre activité !</p>
+                <div class="cards-wrapper" id="cardsWrapper" style="display: none;">
+                    <div id="resultsCtaWrap" class="results-cta-wrap" style="display: none;">
+                        <div class="results-cta" id="resultsCta" role="region" aria-label="Proposer une envie">
+                            <div class="results-cta-glow" aria-hidden="true"></div>
+                            <div class="results-cta-inner">
+                                <div class="results-cta-visual">
+                                    <div class="results-cta-icon-ring">
+                                        <i class="material-icons-round">add_reaction</i>
+                                    </div>
+                                </div>
+                                <div class="results-cta-copy">
+                                    <span class="results-cta-eyebrow" id="resultsCtaEyebrow">Et si c’était vous ?</span>
+                                    <h3 class="results-cta-title" id="resultsCtaTitle">Partagez votre envie du moment</h3>
+                                    <p class="results-cta-desc" id="resultsCtaDesc">D’autres personnes près de vous peuvent la rejoindre en quelques clics.</p>
+                                </div>
+                                <button type="button" class="results-cta-btn" id="resultsCreateBtn">
+                                    <i class="material-icons-round">add_circle</i>
+                                    <span>Publier une envie</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <button class="create-desire-btn" id="resultsCreateBtn">
-                        <i class="material-icons-round">add</i><span>Créer une envie</span>
-                    </button>
-                </div>
-
-                <div class="cards-wrapper" id="cardsWrapper" style="display: none;">
                     <div id="resultsLoadMoreArea" style="display: none; text-align: center; padding: 8px 0 20px;">
                         <button id="resultsLoadMoreBtn" style="background: var(--bg-card); border: 1px solid var(--border-light); color: var(--text-main); padding: 10px 24px; border-radius: 100px; font-weight: 600; cursor: pointer;">
                             Voir plus
@@ -104,8 +111,10 @@ export class ResultsContent extends HTMLElement {
         if (!cards) return;
         const footer = cards.querySelector('.results-footer');
         const loadMoreArea = cards.querySelector('#resultsLoadMoreArea');
-        Array.from(cards.children).forEach(c => {
-            if (c !== footer && c !== loadMoreArea) c.remove();
+        const ctaWrap = cards.querySelector('#resultsCtaWrap');
+        const keep = new Set([footer, loadMoreArea, ctaWrap].filter(Boolean));
+        Array.from(cards.children).forEach((c) => {
+            if (!keep.has(c)) c.remove();
         });
     }
 
@@ -128,7 +137,7 @@ export class ResultsContent extends HTMLElement {
     _renderBatch(desires) {
         const cards = this.querySelector('#cardsWrapper');
         if (!cards) return;
-        const anchor = cards.querySelector('#resultsLoadMoreArea') || cards.querySelector('.results-footer');
+        const anchor = cards.querySelector('#resultsCtaWrap') || cards.querySelector('#resultsLoadMoreArea');
 
         desires.forEach(d => {
             const themeMap = { sport: 'sport', detente: 'chill', apprentissage: 'learn', rencontres: 'rencontres', decouverte: 'explore' };
@@ -147,6 +156,7 @@ export class ResultsContent extends HTMLElement {
             card.setAttribute('btn-text', 'Rejoindre');
             card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
             card.setAttribute('description', d.description || '');
+            if (d.view_count != null) card.setAttribute('view-count', String(d.view_count));
             // Mode owner si c'est sa propre envie
             if (this._myUserId && d.author_id && this._myUserId === d.author_id) {
                 card.setAttribute('mode', 'owner');
@@ -157,7 +167,7 @@ export class ResultsContent extends HTMLElement {
             card.addEventListener('desire-joined', (e) => {
                 e.stopPropagation(); // Empêche le toast intempestif
                 document.dispatchEvent(new CustomEvent('view-desire', {
-                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: `${d.spots_taken}/${d.max_spots}`, price, avatar: d.author_avatar_url || '/assets/img/avatar.png', images: d.images || [], description: d.description },
+                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: `${d.spots_taken}/${d.max_spots}`, price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description },
                     bubbles: true, composed: true,
                 }));
             });
@@ -175,12 +185,12 @@ export class ResultsContent extends HTMLElement {
 
         const skeletons = this.querySelector('#skeletonsWrapper');
         const cards = this.querySelector('#cardsWrapper');
-        const cta = this.querySelector('#resultsCta');
+        const ctaWrap = this.querySelector('#resultsCtaWrap');
 
         if (!append) {
             if (skeletons) { skeletons.style.display = 'flex'; skeletons.style.flexDirection = 'column'; }
             if (cards) cards.style.display = 'none';
-            if (cta) cta.style.display = 'none';
+            if (ctaWrap) ctaWrap.style.display = 'none';
         }
 
         try {
@@ -209,27 +219,36 @@ export class ResultsContent extends HTMLElement {
 
             if (desires.length === 0 && !append) {
                 const empty = document.createElement('div');
-                empty.style.cssText = 'text-align: center; padding: 60px 20px; color: var(--text-muted);';
+                empty.className = 'results-empty-state';
                 const emptyMsg = this._lastQuery
-                    ? `Aucun résultat pour « ${escapeHtml(this._lastQuery)} ».`
-                    : 'Aucun résultat pour ces critères.';
-                empty.innerHTML = `<i class="material-icons-round" style="font-size: 48px; opacity: 0.3; display: block; margin-bottom: 12px;">search_off</i><p>${emptyMsg}</p>`;
-                const footer = cards.querySelector('.results-footer');
-                cards.insertBefore(empty, footer);
+                    ? `Aucun résultat pour « ${escapeHtml(this._lastQuery)} »`
+                    : 'Aucune envie ne correspond à ces critères pour le moment.';
+                empty.innerHTML = `
+                    <div class="results-empty-icon"><i class="material-icons-round">travel_explore</i></div>
+                    <p class="results-empty-text">${emptyMsg}</p>
+                    <p class="results-empty-hint">Élargissez les filtres ou proposez la première envie sur ce thème.</p>`;
+                const ctaW = cards.querySelector('#resultsCtaWrap');
+                cards.insertBefore(empty, ctaW || cards.querySelector('.results-footer'));
+                this._setCtaCopy('empty');
             } else {
                 this._renderBatch(desires);
                 if (desires.length > 0) this._currentPage += 1;
+                this._setCtaCopy(desires.length > 0 ? 'hasResults' : 'empty');
             }
 
             if (skeletons) skeletons.style.display = 'none';
             if (cards) cards.style.display = 'flex';
-            if (cta) cta.style.display = 'block';
+            if (ctaWrap) ctaWrap.style.display = 'block';
             this._updateLoadMoreUi();
 
         } catch (err) {
             console.warn('Erreur de recherche :', err);
             if (skeletons) skeletons.style.display = 'none';
             if (cards) cards.style.display = 'flex';
+            if (ctaWrap) {
+                ctaWrap.style.display = 'block';
+                this._setCtaCopy('empty');
+            }
         } finally {
             this._loading = false;
             this._updateLoadMoreUi();
@@ -269,10 +288,26 @@ export class ResultsContent extends HTMLElement {
 
         const skeletons = this.querySelector('#skeletonsWrapper');
         const cards     = this.querySelector('#cardsWrapper');
-        const cta       = this.querySelector('#resultsCta');
+        const ctaWrap = this.querySelector('#resultsCtaWrap');
         if (skeletons) skeletons.style.display = 'none';
-        if (cards)     cards.style.display     = 'none';
-        if (cta)       cta.style.display       = 'none';
+        if (cards) cards.style.display = 'none';
+        if (ctaWrap) ctaWrap.style.display = 'none';
+    }
+
+    _setCtaCopy(mode) {
+        const eyebrow = this.querySelector('#resultsCtaEyebrow');
+        const title = this.querySelector('#resultsCtaTitle');
+        const desc = this.querySelector('#resultsCtaDesc');
+        if (!eyebrow || !title || !desc) return;
+        if (mode === 'empty') {
+            eyebrow.textContent = 'Soyez le premier';
+            title.textContent = 'Lancez une envie qui vous ressemble';
+            desc.textContent = 'Proposez une activité en quelques minutes — d’autres pourront vous rejoindre.';
+        } else {
+            eyebrow.textContent = 'Et si c’était vous ?';
+            title.textContent = 'Une autre idée en tête ?';
+            desc.textContent = 'Publiez-la : des personnes près de vous pourraient vouloir la partager.';
+        }
     }
 
     // Appelée depuis main.ts lors d'une recherche (barre de recherche)
