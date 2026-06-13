@@ -183,6 +183,76 @@ body.state-results .suggestions-container {
     box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2);
 }
 
+.latest-desires-section {
+    padding: 0 4px;
+}
+
+.latest-desires-header {
+    margin-bottom: 16px;
+}
+
+.latest-desires-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-main);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.latest-desires-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: 20px;
+    align-items: stretch;
+}
+
+.latest-desires-actions {
+    text-align: center;
+}
+
+.latest-desires-section::after {
+    content: '';
+    display: block;
+    height: 12px;
+}
+
+.latest-desires-btn {
+    width: 100%;
+    padding: 14px 24px;
+    border-radius: 100px;
+    border: none;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: white;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.latest-desires-btn:hover {
+    transform: translateY(-2px);
+}
+
+.latest-desires-btn::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 50%; height: 100%;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transform: skewX(-20deg);
+    transition: 0.5s;
+}
+
+.latest-desires-btn:hover::after {
+    left: 150%;
+}
+
 .suggestions-container.active .suggestion-chip:nth-child(1):not(.filtered-out) {
     transition-delay: 0.05s;
 }
@@ -266,14 +336,16 @@ body.state-results .scroll-down-indicator {
 
 
 /* --- CARTES --- */
+.desire-card--clickable {
+    cursor: pointer;
+}
+
 .desire-card {
     background: var(--bg-card);
     border-radius: 24px;
     padding: 20px;
-    box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.04),
-        0 6px 24px rgba(0, 0, 0, 0.07);
-    border: none;
+    box-shadow: none;
+    border: 1px solid var(--border-color, rgba(0,0,0,0.05));
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -284,22 +356,18 @@ body.state-results .scroll-down-indicator {
 
 .desire-card:hover {
     transform: translateY(-4px);
-    box-shadow:
-        0 2px 4px rgba(0, 0, 0, 0.04),
-        0 16px 40px rgba(0, 0, 0, 0.1),
-        0 0 0 1.5px color-mix(in srgb, var(--theme-color, var(--primary)) 18%, transparent);
+    box-shadow: none;
+    border-color: color-mix(in srgb, var(--theme-color, var(--primary)) 30%, var(--border-color, rgba(0,0,0,0.05)));
 }
 
 [data-theme="dark"] .desire-card {
-    box-shadow:
-        0 0 0 1px rgba(255, 255, 255, 0.06),
-        0 8px 28px rgba(0, 0, 0, 0.35);
+    box-shadow: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 [data-theme="dark"] .desire-card:hover {
-    box-shadow:
-        0 0 0 1.5px color-mix(in srgb, var(--theme-color, var(--primary)) 35%, transparent),
-        0 16px 44px rgba(0, 0, 0, 0.5);
+    box-shadow: none;
+    border-color: color-mix(in srgb, var(--theme-color, var(--primary)) 50%, rgba(255, 255, 255, 0.1));
 }
 
 /* Étiquette sponsorisé */
@@ -652,12 +720,12 @@ body.state-results .scroll-down-indicator {
     align-items: center;
     justify-content: center;
     gap: 12px;
-    padding: 60px 20px 40px;
+    padding: 32px 20px 24px;
     font-size: 12.5px;
     font-weight: 500;
     color: var(--text-muted);
     width: 100%;
-    margin-top: 20px;
+    margin-top: 12px;
     flex-wrap: wrap;
 }
 

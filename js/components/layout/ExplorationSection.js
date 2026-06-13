@@ -1,4 +1,6 @@
 import { DEFAULT_AVATAR_PATH } from '../../utils/escapeHtml.js';
+import { formatSpotsLabel } from '../../utils/formatSpots.js';
+import { createDesireCard } from '../../utils/desireCards.js';
 
 /**
  * ExplorationSection — Affiche les dernières envies depuis l'API.
@@ -43,7 +45,7 @@ export class ExplorationSection extends HTMLElement {
                     ${this._skeletons(3)}
                 </div>
 
-                <div id="loadMoreArea" style="text-align: center; padding: 20px 0; display: none;">
+                <div id="loadMoreArea" style="text-align: center; padding: 10px 0; display: none;">
                     <button id="loadMoreBtn" style="background: var(--bg-card); border: 1px solid var(--border-light); color: var(--text-main); padding: 12px 28px; border-radius: 100px; font-weight: 600; cursor: pointer;">
                         Voir plus
                     </button>
@@ -105,9 +107,6 @@ export class ExplorationSection extends HTMLElement {
             if (match) p.setAttribute('active', '');
             else p.removeAttribute('active');
         });
-        const rencontresPill = filtersContainer.querySelector('[data-category="rencontres"]');
-        const rencontresActive = rencontresPill?.hasAttribute('active');
-        document.documentElement.setAttribute('data-theme', rencontresActive ? 'dark' : 'light');
     }
 
     _formatDate(iso) {
@@ -146,56 +145,7 @@ export class ExplorationSection extends HTMLElement {
         }
 
         desires.forEach(d => {
-            const card = document.createElement('desire-card');
-            card.setAttribute('theme', this._themeFromCategory(d.category));
-            card.setAttribute('title', d.title);
-            card.setAttribute('author', d.author_pseudo || 'Anonyme');
-            card.setAttribute('time-ago', this._timeAgo(d.created_at));
-            card.setAttribute('avatar', d.author_avatar_url || DEFAULT_AVATAR_PATH);
-            card.setAttribute('date', this._formatDate(d.event_date));
-            card.setAttribute('price', this._formatPrice(d));
-            card.setAttribute('commune', d.commune || 'Abidjan');
-            card.setAttribute('spots', `${d.spots_taken}/${d.max_spots} places`);
-            card.setAttribute('btn-text', 'Rejoindre');
-            card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
-            card.setAttribute('description', d.description || '');
-            if (d.view_count != null) card.setAttribute('view-count', String(d.view_count));
-            card.dataset.desireId = d.id;
-            card.setAttribute('desire-id', d.id); // requis par getAttribute('desire-id') dans DesireCard
-            card.dataset.authorId = d.author_id || ''; // pour que desire-view l'inclue
-
-            if (d.is_boosted) {
-                card.setAttribute('is-boosted', '');
-            }
-
-            if (myUserId && d.author_id && myUserId === d.author_id) {
-                card.setAttribute('mode', 'owner');
-            }
-
-            // Clic sur rejoindre → ouvre le panneau détails (sans déclencher le toast)
-            card.addEventListener('desire-joined', (e) => {
-                e.stopPropagation(); // Empêche desire-joined de remonter à window (et le toast)
-                const event = new CustomEvent('view-desire', {
-                    detail: {
-                        id: d.id,
-                        authorId: d.author_id || null,
-                        title: d.title,
-                        author: d.author_pseudo || 'Anonyme',
-                        timeAgo: this._timeAgo(d.created_at),
-                        commune: d.commune || 'Abidjan',
-                        date: this._formatDate(d.event_date),
-                        spots: `${d.spots_taken}/${d.max_spots} places`,
-                        price: this._formatPrice(d),
-                        avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH,
-                        images: d.images || [],
-                        description: d.description || '',
-                        price_type: d.price_type,
-                    },
-                    bubbles: true, composed: true,
-                });
-                this.dispatchEvent(event);
-            });
-
+            const card = createDesireCard(d, { myUserId, openDetailsOnJoin: true });
             grid.appendChild(card);
         });
     }
@@ -285,11 +235,21 @@ export class ExplorationSection extends HTMLElement {
             // Charger les envies (catégorie + filtres modale)
             const filters = { ...this._activeFilters };
             if (this._activeCategory) filters.category = this._activeCategory;
+
+            if (filters.category !== 'rencontres') {
+                filters.exclude_category = 'rencontres';
+            }
+
             filters.page = this._currentPage;
             filters.size = this._pageSize;
 
             const data = await api.fetchDesires(filters);
             let { items: desires, hasMore } = this._extractPagedItems(data);
+
+            // Filtre de sécurité Front-End (au cas où le backend ne gère pas encore exclude_category)
+            if (filters.category !== 'rencontres') {
+                desires = desires.filter(d => d.category !== 'rencontres');
+            }
             this._hasMore = hasMore;
 
             if (append) {
@@ -393,13 +353,9 @@ export class ExplorationSection extends HTMLElement {
                     this._activeCategory = null;
                 }
 
-                // Easter egg Rencontres → Dark mode
-                if (category === 'rencontres' && isNowActive) {
-                    document.documentElement.setAttribute('data-theme', 'dark');
-                } else {
-                    const rencontresPill = filtersContainer.querySelector('[data-category="rencontres"]');
-                    const rencontresActive = rencontresPill?.hasAttribute('active');
-                    document.documentElement.setAttribute('data-theme', rencontresActive ? 'dark' : 'light');
+                if (!this._activeCategory) {
+                    this._activeFilters = {};
+                    document.dispatchEvent(new CustomEvent('filters-cleared', { bubbles: true, composed: true }));
                 }
 
                 if (document.body.classList.contains('state-results')) {

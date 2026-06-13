@@ -1,5 +1,6 @@
 import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
 import { resolveImageUrl } from '../../utils/imageUrl.js';
+import { formatSpotsLabel } from '../../utils/formatSpots.js';
 
 export class ProfilePage extends HTMLElement {
     connectedCallback() {
@@ -229,6 +230,12 @@ export class ProfilePage extends HTMLElement {
                 const { api } = await import('../../api.js');
                 const { stop: stopSession } = await import('../../utils/sessionManager.js');
                 stopSession();
+
+                // Supprimer le token FCM
+                import('../../utils/firebaseConfig.js').then(({ deleteCurrentToken }) => {
+                    deleteCurrentToken().catch(() => {});
+                });
+
                 api.logout();
                 this.dispatchEvent(new CustomEvent('navigate-login', { bubbles: true, composed: true }));
             });
@@ -309,7 +316,7 @@ export class ProfilePage extends HTMLElement {
                                 title="${escapeHtml(desire.title)}"
                                 date="${escapeHtml(dateStr)}" 
                                 price="${escapeHtml(priceStr)}" 
-                                spots="${escapeHtml(String(desire.spots_taken || 0) + '/' + desire.max_spots + ' places')}"
+                                spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots))}"
                                 images="${escapeHtml(imagesStr)}"
                                 description="${escapeHtml(desire.description || '')}"
                                 show-boost
@@ -364,7 +371,7 @@ export class ProfilePage extends HTMLElement {
                                 title="${escapeHtml(desire.title)}"
                                 date="${escapeHtml(dateStr)}" 
                                 price="${escapeHtml(priceStr)}" 
-                                spots="${escapeHtml(String(desire.spots_taken || 0) + '/' + desire.max_spots + ' places')}"
+                                spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots))}"
                                 images="${escapeHtml(imagesStr)}"
                                 description="${escapeHtml(desire.description || '')}"
                             ></desire-card>

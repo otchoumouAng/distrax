@@ -1,5 +1,6 @@
 import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
 import { resolveImageUrl, getImageVariantUrl } from '../../utils/imageUrl.js';
+import { formatSpotsLabel } from '../../utils/formatSpots.js';
 
 export class DesireDetailsPage extends HTMLElement {
     constructor() {
@@ -505,7 +506,7 @@ export class DesireDetailsPage extends HTMLElement {
                     timeAgo: 'À l\'instant',
                     commune: full.commune || 'Abidjan',
                     date: this._formatDateDetail(full.event_date),
-                    spots: `${full.spots_taken ?? 0}/${full.max_spots ?? 1} places`,
+                    spots: formatSpotsLabel(full.spots_taken, full.max_spots),
                     price: this._formatPriceDetail(full),
                     avatar: resolveImageUrl(full.user?.avatar_url ?? full.author_avatar_url ?? full.author?.avatar_url) || DEFAULT_AVATAR_PATH,
                     images: full.images || [],

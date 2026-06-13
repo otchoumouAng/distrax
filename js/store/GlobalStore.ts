@@ -13,11 +13,7 @@ class Store {
     constructor(initialState: AppState) {
         this._state = { ...initialState };
 
-        // Chargement du thème sauvegardé
-        const savedTheme = localStorage.getItem('dystrax-theme');
-        if (savedTheme === 'light' || savedTheme === 'dark') {
-            this._state.theme = savedTheme;
-        }
+        this._state.theme = 'light';
     }
 
     // Accès à l'état (getter)

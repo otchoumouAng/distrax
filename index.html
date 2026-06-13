@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 
 <head>
     <meta charset="UTF-8">
@@ -8,6 +8,7 @@
     <meta name="theme-color" content="#6366f1">
     <meta name="description" content="Dystrax — Trouvez et partagez des envies autour de vous. Sport, sorties, apprentissage, rencontres à Abidjan.">
     <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
@@ -21,6 +22,9 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Dystrax - De quoi avez-vous envie aujourd'hui ?">
     <meta name="twitter:description" content="Trouvez et partagez des envies d'activités autour de vous. Sport, sorties, apprentissage, rencontres à Abidjan.">
+
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 
     <title>Dystrax - De quoi avez-vous envie aujourd'hui ?</title>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
@@ -50,6 +54,7 @@
         <app-results-content></app-results-content>
 
         <!-- Pages SPA Additionnelles -->
+        <app-search-page></app-search-page>
         <app-login-page></app-login-page>
         <app-register-page></app-register-page>
         <app-forgot-password-page></app-forgot-password-page>

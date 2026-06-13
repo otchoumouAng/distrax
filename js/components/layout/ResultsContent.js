@@ -1,4 +1,5 @@
 import { escapeHtml, DEFAULT_AVATAR_PATH } from '../../utils/escapeHtml.js';
+import { formatSpotsLabel } from '../../utils/formatSpots.js';
 
 export class ResultsContent extends HTMLElement {
     constructor() {
@@ -152,7 +153,7 @@ export class ResultsContent extends HTMLElement {
             card.setAttribute('date', new Date(d.event_date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
             card.setAttribute('price', price);
             card.setAttribute('commune', d.commune || 'Abidjan');
-            card.setAttribute('spots', `${d.spots_taken}/${d.max_spots} places`);
+            card.setAttribute('spots', formatSpotsLabel(d.spots_taken, d.max_spots));
             card.setAttribute('btn-text', 'Rejoindre');
             card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
             card.setAttribute('description', d.description || '');
@@ -167,7 +168,7 @@ export class ResultsContent extends HTMLElement {
             card.addEventListener('desire-joined', (e) => {
                 e.stopPropagation(); // Empêche le toast intempestif
                 document.dispatchEvent(new CustomEvent('view-desire', {
-                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: `${d.spots_taken}/${d.max_spots}`, price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description },
+                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: formatSpotsLabel(d.spots_taken, d.max_spots), price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description },
                     bubbles: true, composed: true,
                 }));
             });

@@ -3,7 +3,7 @@ import { resolveImageUrl, getImageVariantUrl } from '../../utils/imageUrl.js';
 
 export class DesireCard extends HTMLElement {
     static get observedAttributes() {
-        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count'];
+        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card'];
     }
 
     connectedCallback() {
@@ -62,7 +62,8 @@ export class DesireCard extends HTMLElement {
         const viewCountHtml = (viewCount != null && viewCount !== '') ? `<span class="meta-tag"><i class="material-icons-round">visibility</i> ${escapeHtml(String(Number(viewCount).toLocaleString('fr-FR')))} vues</span>` : '';
 
         const mode = this.getAttribute('mode') || 'default';
-        const desireId = this.getAttribute('desire-id');
+        const navigateOnCard = this.hasAttribute('navigate-on-card');
+        const hideViewBtn = navigateOnCard && (mode === 'default' || mode === 'owner');
 
         const hasActiveBoost = this.hasAttribute('has-active-boost');
         const isBoosted = this.hasAttribute('is-boosted');
@@ -88,12 +89,13 @@ export class DesireCard extends HTMLElement {
                 ${boostBtnHtml}
             `;
         } else if (mode === 'owner') {
-            // Ma propre envie dans l'exploration
-            cardActionsHtml = `
-                <button class="view-btn ca-btn ca-btn--view">
-                    <i class="material-icons-round">visibility</i> Voir
-                </button>
-            `;
+            if (!hideViewBtn) {
+                cardActionsHtml = `
+                    <button class="view-btn ca-btn ca-btn--view">
+                        <i class="material-icons-round">visibility</i> Voir
+                    </button>
+                `;
+            }
         } else if (mode === 'pending') {
             // Demande déjà envoyée — ouvre les détails au clic
             cardActionsHtml = `
@@ -112,18 +114,23 @@ export class DesireCard extends HTMLElement {
                 </button>
             `;
         } else {
-            // Mode par défaut (exploration/résultats)
-            cardActionsHtml = `
-                <button class="view-btn ca-btn ca-btn--view">
-                    <i class="material-icons-round">visibility</i> Voir
-                </button>
-                ${this.hasAttribute('show-boost') ? '<button class="boost-inline-btn ca-btn ca-btn--boost"><i class="material-icons-round">rocket_launch</i> Booster</button>' : ''}
-            `;
+            if (!hideViewBtn) {
+                cardActionsHtml = `
+                    <button class="view-btn ca-btn ca-btn--view">
+                        <i class="material-icons-round">visibility</i> Voir
+                    </button>
+                `;
+            }
+            if (this.hasAttribute('show-boost')) {
+                cardActionsHtml += '<button class="boost-inline-btn ca-btn ca-btn--boost"><i class="material-icons-round">rocket_launch</i> Booster</button>';
+            }
         }
 
         const themeSafe = ['explore', 'sport', 'chill', 'learn', 'rencontres'].includes(theme) ? theme : 'explore';
+        const cardClickableClass = navigateOnCard ? ' desire-card--clickable' : '';
+        const actionsStyle = cardActionsHtml ? 'display: flex; gap: 8px;' : 'display: none;';
         this.innerHTML = `
-            <article class="desire-card card-${themeSafe}">
+            <article class="desire-card card-${themeSafe}${cardClickableClass}">
                 ${imageHtml}
                 ${sponsoredBadgeHtml}
                 <div class="card-header">
@@ -149,7 +156,7 @@ export class DesireCard extends HTMLElement {
                         ${avatarsStackHtml}
                         ${spotsHtml}
                     </div>
-                    <div class="card-actions" style="display: flex; gap: 8px;">
+                    <div class="card-actions" style="${actionsStyle}">
                         ${cardActionsHtml}
                     </div>
                 </div>
@@ -219,33 +226,18 @@ export class DesireCard extends HTMLElement {
         if (viewBtn) {
             viewBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                // Utilise 'desire-view' et non 'desire-joined' pour ne pas déclencher le toast
-                // authorId est stocké dans dataset par ExplorationSection / ResultsContent
-                // isJoined est déduit du mode actuel de la carte
-                const currentMode = this.getAttribute('mode');
-                // Utiliser getAttribute() pour récupérer les valeurs brutes (non HTML-échappées)
-                const event = new CustomEvent('desire-view', {
-                    detail: {
-                        id:          this.getAttribute('desire-id'),
-                        authorId:    this.dataset.authorId || null,
-                        isJoined:    currentMode === 'joined',
-                        title:       this.getAttribute('title')    || '',
-                        author:      this.getAttribute('author')   || '',
-                        theme:       this.getAttribute('theme')    || 'explore',
-                        timeAgo:     this.getAttribute('time-ago') || '',
-                        commune:     this.getAttribute('commune')  || '',
-                        date:        this.getAttribute('date')     || '',
-                        spots:       this.getAttribute('spots')    || '',
-                        price:       this.getAttribute('price')    || '',
-                        avatar:      this.getAttribute('avatar')   || DEFAULT_AVATAR_PATH,
-                        images:      imagesArray,
-                        description: this.getAttribute('description') || '',
-                    },
-                    bubbles: true,
-                    composed: true
-                });
-                this.dispatchEvent(event);
+                this._dispatchDesireView(imagesArray);
             });
+        }
+
+        if (navigateOnCard) {
+            const article = this.querySelector('.desire-card');
+            if (article) {
+                article.addEventListener('click', (e) => {
+                    if (e.target.closest('button')) return;
+                    this._dispatchDesireView(imagesArray);
+                });
+            }
         }
 
         const leaveBtn = this.querySelector('.leave-btn');
@@ -301,6 +293,31 @@ export class DesireCard extends HTMLElement {
 
         // Masquer le bouton boost si la feature est désactivée (check non-bloquant)
         this._applyBoostVisibility();
+    }
+
+    _dispatchDesireView(imagesArray) {
+        const currentMode = this.getAttribute('mode');
+        const event = new CustomEvent('desire-view', {
+            detail: {
+                id:          this.getAttribute('desire-id'),
+                authorId:    this.dataset.authorId || null,
+                isJoined:    currentMode === 'joined',
+                title:       this.getAttribute('title')    || '',
+                author:      this.getAttribute('author')   || '',
+                theme:       this.getAttribute('theme')    || 'explore',
+                timeAgo:     this.getAttribute('time-ago') || '',
+                commune:     this.getAttribute('commune')  || '',
+                date:        this.getAttribute('date')     || '',
+                spots:       this.getAttribute('spots')    || '',
+                price:       this.getAttribute('price')    || '',
+                avatar:      this.getAttribute('avatar')   || DEFAULT_AVATAR_PATH,
+                images:      imagesArray,
+                description: this.getAttribute('description') || '',
+            },
+            bubbles: true,
+            composed: true
+        });
+        this.dispatchEvent(event);
     }
 
     async _applyBoostVisibility() {

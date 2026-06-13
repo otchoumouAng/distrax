@@ -1,56 +1,53 @@
-/**
- * firebase-messaging-sw.js — Service Worker FCM pour Dystrax
- * Généré par scripts/inject-firebase-sw.cjs à partir de .env.dev / .env.prod
- */
+// public/firebase-messaging-sw.js
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
-importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js');
+// On doit récupérer ces infos via des query params ou les hardcoder s'ils sont publics.
+// Les variables d'environnement Vite ne sont pas directement accessibles ici.
+// Par convention, soit on a un fichier de config séparé, soit on les injecte au build.
+// Ici, on va utiliser la configuration par défaut. Assurez-vous d'injecter la bonne config
+// au moment du build ou en remplaçant ce fichier via un script.
 
+// Le développeur devra remplacer ces valeurs factices par celles de son projet Firebase
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID",
+    apiKey: "AIzaSyDuSWjg0SuwTW_2rtwdzJ-uWHIGWJ0O050",
+    projectId: "distrax-7056b",
+    messagingSenderId: "26607047645",
+    appId: "1:26607047645:web:cfeea2e187d3e53eaa5c34"
 };
 
-firebase.initializeApp(firebaseConfig);
-const messaging = firebase.messaging();
+// Initialisation conditionnelle pour éviter les erreurs si la config est vide
+if (firebaseConfig.apiKey && firebaseConfig.apiKey !== 'REPLACE_WITH_API_KEY') {
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage((payload) => {
-    console.log('[SW] Notification reçue en background:', payload);
-    const { title, body } = payload.notification || {};
-    const data = payload.data || {};
-    self.registration.showNotification(title || 'Dystrax', {
-        body: body || 'Vous avez une nouvelle notification.',
-        icon: '/assets/icons/icon-192.png',
-        badge: '/assets/icons/badge-72.png',
-        data,
-        vibrate: [200, 100, 200],
-        tag: data.type || 'dystrax-notif',
-        requireInteraction: false,
+    messaging.onBackgroundMessage(function(payload) {
+        console.log('[firebase-messaging-sw.js] Received background message ', payload);
+        const notificationTitle = payload.notification?.title || 'Distrax';
+        const notificationOptions = {
+            body: payload.notification?.body,
+            icon: '/assets/img/logo.png', // Le logo favicon
+            data: payload.data
+        };
+
+        self.registration.showNotification(notificationTitle, notificationOptions);
     });
-});
+}
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('notificationclick', function(event) {
     event.notification.close();
-    const data = event.notification.data || {};
-    let url = '/';
-    if (data.type === 'desire_joined') {
-        url = '/#profile';
-    } else if (data.type === 'boost_nearby' && data.desire_id) {
-        url = `/#desire/${data.desire_id}`;
-    }
+    // Gérer l'action au clic sur la notification
     event.waitUntil(
-        clients.matchAll({ type: 'window' }).then((windowClients) => {
-            for (const client of windowClients) {
-                if (client.url.includes(self.location.origin) && 'focus' in client) {
-                    client.navigate(url);
-                    return client.focus();
-                }
+        clients.matchAll({ type: 'window' }).then(windowClients => {
+            if (windowClients.length > 0) {
+                // Focus sur la fenêtre existante
+                windowClients[0].focus();
+                // On peut aussi lui envoyer un message
+                windowClients[0].postMessage({ type: 'FCM_CLICK', data: event.notification.data });
+            } else {
+                // Ouvrir l'application
+                clients.openWindow('/');
             }
-            if (clients.openWindow) return clients.openWindow(url);
         })
     );
 });

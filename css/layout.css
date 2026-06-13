@@ -471,6 +471,7 @@ body.state-results .exploration-section {
         padding: max(20px, env(safe-area-inset-top)) 16px 20px;
         display: flex;
         flex-direction: column;
+        overscroll-behavior: contain;
     }
 
     .search-container.active .search-box {
@@ -487,6 +488,8 @@ body.state-results .exploration-section {
         transform: none;
         opacity: 1;
         pointer-events: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
     }
 
     .search-container.active .mobile-back-btn {
@@ -545,7 +548,7 @@ body.state-results .exploration-section {
     }
 
     .exploration-section {
-        padding: 24px 16px 100px;
+        padding: 24px 16px calc(76px + env(safe-area-inset-bottom));
     }
 
     /* Ajuster la marge négative pour le mobile car le padding horizontal est de 16px */
@@ -595,7 +598,7 @@ body.state-results .exploration-section {
     }
 
     .page-footer {
-        padding: 40px 20px 100px;
+        padding: 32px 20px 24px;
         font-size: 11.5px;
         gap: 8px;
     }

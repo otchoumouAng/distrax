@@ -97,6 +97,24 @@ export const api = {
         return data;
     },
 
+    /**
+     * Connexion avec Google : POST /auth/google
+     * @param {string} idToken - Token d'identité reçu depuis Google Identity Services
+     * @returns {Promise<{access_token, token_type}>}
+     */
+    async loginWithGoogle(idToken) {
+        const res = await fetch(`${BASE_URL}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: idToken }),
+        });
+        const data = await handleResponse(res);
+        if (data.access_token) {
+            setToken(data.access_token);
+        }
+        return data;
+    },
+
     /** Déconnexion : supprime le token du localStorage */
     logout() {
         removeToken();
@@ -189,6 +207,7 @@ export const api = {
         const params = new URLSearchParams();
         if (filters.query) params.set('query', filters.query);
         if (filters.category) params.set('category', filters.category);
+        if (filters.exclude_category) params.set('exclude_category', filters.exclude_category);
         if (filters.commune) params.set('commune', filters.commune);
         if (filters.price_type) params.set('price_type', filters.price_type);
         params.set('page', filters.page || 1);
@@ -454,6 +473,35 @@ export const api = {
     async getFeatures(domain) {
         const params = domain ? `?domain=${encodeURIComponent(domain)}` : '';
         const res = await fetch(`${BASE_URL}/features${params}`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    // ── Push Notifications (FCM) ─────────────────────────────────
+
+    /**
+     * POST /push/register — Enregistre le token FCM de l'appareil
+     * @param {string} token 
+     * @param {string} platform - 'web', 'android', 'ios'
+     */
+    async registerDeviceToken(token, platform = 'web') {
+        const res = await fetch(`${BASE_URL}/push/register`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify({ token, platform }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * DELETE /push/register — Supprime le token FCM
+     * @param {string} token 
+     */
+    async deleteDeviceToken(token) {
+        const res = await fetch(`${BASE_URL}/push/register`, {
+            method: 'DELETE',
+            headers: buildHeaders(),
+            body: JSON.stringify({ token }),
+        });
         return handleResponse(res);
     },
 

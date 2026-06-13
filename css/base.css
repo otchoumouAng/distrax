@@ -25,6 +25,10 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+body.search-open {
+    overflow: hidden;
+}
+
 html.smooth-scroll {
     scroll-behavior: smooth;
 }

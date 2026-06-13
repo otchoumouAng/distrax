@@ -9,13 +9,13 @@ import { GlobalStore } from './store/GlobalStore.js';
 import { api } from './api.js';
 import { escapeHtml } from './utils/escapeHtml.js';
 import * as sessionManager from './utils/sessionManager.js';
+import { initFirebase } from './utils/firebaseConfig.js';
 
 // Pages accessibles sans être connecté
-const PUBLIC_PAGES = new Set(['home', 'results', 'login', 'register', 'forgot-password', 'reset-password']);
+const PUBLIC_PAGES = new Set(['home', 'search', 'results', 'login', 'register', 'forgot-password', 'reset-password']);
 
 // 3. IMPORT DES WEB COMPONENTS
 // Ces imports enregistrent les Custom Elements via customElements.define()
-import './components/ui/ThemeSwitch.js';
 import './components/ui/DesireCard.js';
 import './components/ui/FilterPill.js';
 import './components/ui/FilterModal.js';
@@ -24,6 +24,7 @@ import './components/layout/ResultsHeader.js';
 import './components/layout/ExplorationSection.js';
 import './components/layout/ResultsContent.js';
 import './components/search/HomeHero.js';
+import './components/pages/SearchPage.js';
 import './components/pages/NotificationPage.js';
 import './components/pages/CreationPage.js';
 import './components/pages/ProfilePage.js';
@@ -36,30 +37,28 @@ import './components/pages/BoostPage.js';
 import './components/pages/BoostDetailsPage.js';
 
 /* ---------------------------------------------------------------
-   4. THÈME IMMÉDIAT (avant DOMContentLoaded)
+   4. THÈME — mode clair uniquement
    --------------------------------------------------------------- */
-// Appliquer immédiatement le thème sauvegardé pour éviter le flash
-const _savedTheme = localStorage.getItem('dystrax-theme');
-if (_savedTheme === 'dark' || _savedTheme === 'light') {
-    document.documentElement.setAttribute('data-theme', _savedTheme);
-}
+document.documentElement.setAttribute('data-theme', 'light');
+localStorage.setItem('dystrax-theme', 'light');
 
 /* ---------------------------------------------------------------
    5. STORE SUBSCRIPTIONS
    --------------------------------------------------------------- */
 GlobalStore.subscribe('theme', (theme: string) => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('dystrax-theme', theme);
+    const resolved = theme === 'dark' ? 'light' : theme;
+    document.documentElement.setAttribute('data-theme', resolved);
+    localStorage.setItem('dystrax-theme', resolved);
 });
-// Synchroniser le store avec la valeur déjà en localStorage
-if (_savedTheme) {
-    GlobalStore.setState('theme', _savedTheme as 'light' | 'dark');
-}
+GlobalStore.setState('theme', 'light');
 
 /* ---------------------------------------------------------------
    5. NAVIGATION SPA
    --------------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
+    
+    // Initialiser Firebase (si configuré)
+    initFirebase();
 
     const get = <T extends HTMLElement>(selector: string) =>
         document.querySelector(selector) as T | null;
@@ -68,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const explorationSection = get('app-exploration-section');
     const navbar = get<HTMLElement>('app-navbar');
     const resultsContent = get('app-results-content');
+    const searchPage = get<any>('app-search-page');
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const notificationPage = get<any>('app-notification-page');
@@ -146,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hide(explorationSection);
         hide(resultsContent);
         document.body.classList.remove('state-results');
+        if (searchPage?.hide) searchPage.hide();
         if (notificationPage?.hide) notificationPage.hide();
         if (creationPage?.hide) creationPage.hide();
         if (profilePage?.hide) profilePage.hide();
@@ -182,6 +183,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     explSection.loadDesires?.();
                 }
                 window.dispatchEvent(new CustomEvent('refresh-notif-badge'));
+                break;
+            case 'search':
+                hide(homeHero);
+                hide(explorationSection);
+                hide(resultsContent);
+                hide(navbar);
+                if (searchPage?.show) searchPage.show();
                 break;
             case 'results':
                 show(homeHero);
@@ -334,6 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Événements de navigation émis par les composants
     window.addEventListener('navigate-home', () => navigateTo('home'));
+    window.addEventListener('navigate-search', () => navigateTo('search'));
     window.addEventListener('navigate-notifications', () => guardedNavigate('notifications'));
     window.addEventListener('navigate-creation', () => guardedNavigate('creation'));
     window.addEventListener('navigate-profile', () => guardedNavigate('profile'));

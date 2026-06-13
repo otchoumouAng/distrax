@@ -55,6 +55,10 @@ export class FilterModal extends HTMLElement {
                         background-image: url('data:image/svg+xml;utf8,<svg fill="%2371717a" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>'); 
                     }
                 }
+                .custom-select-container { position: relative; width: 100%; }
+                .custom-select-trigger { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+                .custom-select-option:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); }
+                .custom-select-option.selected { background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); font-weight: bold; }
             </style>
             <div class="filter-modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9999; backdrop-filter: blur(8px); transition: opacity 0.3s ease;">
                 <div class="filter-modal-content premium-modal-content">
@@ -69,6 +73,25 @@ export class FilterModal extends HTMLElement {
                         <button class="close-modal-btn" style="background: var(--bg-card); border: 1px solid var(--border-light); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-main); box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: all 0.2s;">
                             <i class="material-icons-round" style="font-size: 20px;">close</i>
                         </button>
+                    </div>
+
+                    <div class="filter-group" style="margin-bottom: 28px;">
+                        <label style="display: block; font-weight: 700; color: var(--text-main); margin-bottom: 12px; font-size: 15px;">Catégorie</label>
+                        <div class="custom-select-container" id="filterCategoryDropdown">
+                            <div class="custom-select-trigger premium-input" id="filterCategoryTrigger">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <i class="material-icons-round" id="filterCategorySelectedIcon" style="display:none; color:var(--primary); font-size:20px;"></i>
+                                    <span class="selected-label" id="filterCategorySelectedLabel">Toutes les catégories</span>
+                                </div>
+                                <i class="material-icons-round" style="color:var(--text-muted); font-size:20px; transition:transform 0.3s;" id="filterCategoryChevron">expand_more</i>
+                            </div>
+                            <div class="custom-select-options" id="filterCategoryOptions" style="display: none; position:absolute; left:0; right:0; top:calc(100% + 8px); background:var(--bg-main); border:1px solid var(--border-light); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,0.1); z-index:100; max-height:220px; overflow-y:auto; padding:8px;">
+                                <div class="custom-select-option selected" data-value="" style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; cursor:pointer; color:var(--text-main);">
+                                    <span style="font-weight:500;">Toutes les catégories</span>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="filterCategorySelect" value="">
                     </div>
 
                     <div class="filter-group" style="margin-bottom: 28px;">
@@ -144,12 +167,85 @@ export class FilterModal extends HTMLElement {
 
         // Écouter l'ouverture des filtres depuis l'extérieur
         document.addEventListener('open-filters', () => this.open());
+        document.addEventListener('filters-cleared', () => this.reset());
+
+        // Setup category dropdown
+        const catTrigger = this.querySelector('#filterCategoryTrigger');
+        const catOptions = this.querySelector('#filterCategoryOptions');
+        const catHidden = this.querySelector('#filterCategorySelect');
+        const catLabel = this.querySelector('#filterCategorySelectedLabel');
+        const catIcon = this.querySelector('#filterCategorySelectedIcon');
+        const catChevron = this.querySelector('#filterCategoryChevron');
+
+        if (catTrigger && catOptions) {
+            catTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = catOptions.style.display === 'block';
+                catOptions.style.display = isOpen ? 'none' : 'block';
+                catChevron.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(180deg)';
+            });
+
+            catOptions.addEventListener('click', (e) => {
+                const opt = e.target.closest('.custom-select-option');
+                if (!opt) return;
+                const val = opt.dataset.value;
+                const label = opt.dataset.label || 'Toutes les catégories';
+                const icon = opt.dataset.icon;
+
+                catHidden.value = val;
+                catLabel.textContent = label;
+                if (icon) {
+                    catIcon.textContent = icon;
+                    catIcon.style.display = 'block';
+                } else {
+                    catIcon.style.display = 'none';
+                }
+
+                catOptions.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+                opt.classList.add('selected');
+
+                catOptions.style.display = 'none';
+                catChevron.style.transform = 'rotate(0deg)';
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!catTrigger.contains(e.target) && !catOptions.contains(e.target)) {
+                    catOptions.style.display = 'none';
+                    catChevron.style.transform = 'rotate(0deg)';
+                }
+            });
+        }
+    }
+
+    reset() {
+        const query = this.querySelector('#filterKeywordsInput');
+        if (query) query.value = '';
+
+        const catHidden = this.querySelector('#filterCategorySelect');
+        const catLabel = this.querySelector('#filterCategorySelectedLabel');
+        const catIcon = this.querySelector('#filterCategorySelectedIcon');
+        const catOptions = this.querySelector('#filterCategoryOptions');
+        if (catHidden) catHidden.value = '';
+        if (catLabel) catLabel.textContent = 'Toutes les catégories';
+        if (catIcon) catIcon.style.display = 'none';
+        if (catOptions) {
+            catOptions.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+            const firstOpt = catOptions.querySelector('.custom-select-option');
+            if (firstOpt) firstOpt.classList.add('selected');
+        }
+
+        const communeSelect = this.querySelector('#filterCommuneSelect');
+        if (communeSelect) communeSelect.value = '';
+
+        this.querySelectorAll('filter-pill[active]').forEach(p => p.removeAttribute('active'));
     }
 
     _applyFilters() {
         const query = (this.querySelector('#filterKeywordsInput')?.value || '').trim();
         const communeSelect = this.querySelector('#filterCommuneSelect');
         const commune = communeSelect?.value?.trim() || null;
+        const categorySelect = this.querySelector('#filterCategorySelect');
+        const category = categorySelect?.value?.trim() || null;
 
         let price_type = null;
         const priceGroup = this.querySelector('#filterPriceGroup');
@@ -169,7 +265,7 @@ export class FilterModal extends HTMLElement {
         document.dispatchEvent(new CustomEvent('apply-filters', {
             bubbles: true,
             composed: true,
-            detail: { query: query || null, commune, price_type, date }
+            detail: { query: query || null, commune, category, price_type, date }
         }));
     }
 
@@ -193,8 +289,30 @@ export class FilterModal extends HTMLElement {
         }
     }
 
+    async _loadCategories() {
+        const optionsContainer = this.querySelector('#filterCategoryOptions');
+        if (!optionsContainer || optionsContainer.children.length > 1) return;
+        try {
+            const { api } = await import('../../api.js');
+            const categories = await api.getCategoriesFull();
+            if (Array.isArray(categories) && categories.length > 0) {
+                optionsContainer.innerHTML = '<div class="custom-select-option selected" data-value="" style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; cursor:pointer; color:var(--text-main);"><span style="font-weight:500;">Toutes les catégories</span></div>';
+                const sorted = categories.sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99));
+                sorted.forEach(c => {
+                    optionsContainer.innerHTML += `<div class="custom-select-option" data-value="${c.slug}" data-label="${c.label}" data-icon="${c.icon}" style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; cursor:pointer; color:var(--text-main);">
+                        <i class="material-icons-round" style="color:var(--primary); font-size:20px;">${c.icon}</i>
+                        <span style="font-weight:500;">${c.label}</span>
+                    </div>`;
+                });
+            }
+        } catch (e) {
+            console.warn('[FilterModal] Catégories non chargées:', e.message);
+        }
+    }
+
     open() {
         this._loadCommunes();
+        this._loadCategories();
         this.overlay.style.display = 'block';
         // Forcer le reflow
         this.overlay.offsetHeight;

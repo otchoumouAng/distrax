@@ -1,3 +1,5 @@
+const DEFAULT_MAX_SPOTS = 10;
+
 export class CreationPage extends HTMLElement {
     connectedCallback() {
         this.innerHTML = `
@@ -58,17 +60,10 @@ export class CreationPage extends HTMLElement {
                             <span class="field-error-msg" id="categoryError">Veuillez sélectionner une catégorie.</span>
                         </div>
 
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-label required-label" for="dateInput">Date et heure</label>
-                                <input id="dateInput" type="datetime-local" class="form-input" required>
-                                <span class="field-error-msg" id="dateError">La date est requise.</span>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label required-label" for="spotsInput">Nombre de personnes</label>
-                                <input id="spotsInput" type="number" class="form-input" min="1" placeholder="Ex: 4" required>
-                                <span class="field-error-msg" id="spotsError">Indiquez le nombre de participants.</span>
-                            </div>
+                        <div class="form-group">
+                            <label class="form-label required-label" for="dateInput">Date et heure</label>
+                            <input id="dateInput" type="datetime-local" class="form-input" required>
+                            <span class="field-error-msg" id="dateError">La date est requise.</span>
                         </div>
 
                         <div class="form-row">
@@ -95,11 +90,6 @@ export class CreationPage extends HTMLElement {
                                     Gratuit
                                 </label>
 
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-weight: 500;">
-                                    <input type="radio" name="price_type" value="contribution" style="accent-color: var(--primary); width: 18px; height: 18px;">
-                                    Contribution libre
-                                </label>
-
                                 <div style="display: flex; flex-direction: column; gap: 8px;">
                                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-weight: 500;">
                                         <input type="radio" name="price_type" value="paid" style="accent-color: var(--primary); width: 18px; height: 18px;">
@@ -107,19 +97,6 @@ export class CreationPage extends HTMLElement {
                                     </label>
                                     
                                     <div id="paidSubOptions" style="display: none; flex-direction: column; gap: 10px; margin-left: 26px; padding: 12px; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border-light);">
-                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-size: 14px;">
-                                            <input type="radio" name="paid_sub_type" value="i_pay" checked style="accent-color: var(--primary);">
-                                            Je paye
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-size: 14px;">
-                                            <input type="radio" name="paid_sub_type" value="they_pay" style="accent-color: var(--primary);">
-                                            <span id="theyPayLabel">L'intéressé(e) me paie</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-main); font-size: 14px;">
-                                            <input type="radio" name="paid_sub_type" value="split" style="accent-color: var(--primary);">
-                                            Chacun paie
-                                        </label>
-                                        
                                         <div class="price-input-wrapper" id="priceInputArea" style="margin-top: 8px;">
                                             <input type="number" class="form-input" id="amountInput" placeholder="Montant en FCFA" min="0" step="500">
                                             <span class="currency">FCFA</span>
@@ -234,22 +211,8 @@ export class CreationPage extends HTMLElement {
             // Logique d'affichage du champ de prix complexe
             const priceRadios = form.querySelectorAll('input[name="price_type"]');
             const paidSubOptions = this.querySelector('#paidSubOptions');
-            const paidSubTypeRadios = form.querySelectorAll('input[name="paid_sub_type"]');
             const priceInputArea = this.querySelector('#priceInputArea');
             const amountInput = this.querySelector('#amountInput');
-            const spotsInput = this.querySelector('#spotsInput'); // Input nombre de personnes
-            const theyPayLabel = this.querySelector('#theyPayLabel');
-
-            // Mise à jour du label "L'intéressée" ou "Les intéressés"
-            if (spotsInput && theyPayLabel) {
-                spotsInput.addEventListener('input', () => {
-                    if (parseInt(spotsInput.value) > 2) { // > 2 signifie Toi + 2 invités = pluriel
-                        theyPayLabel.textContent = "Les intéressés me paient";
-                    } else {
-                        theyPayLabel.textContent = "L'intéressé(e) me paie";
-                    }
-                });
-            }
 
             priceRadios.forEach(radio => {
                 radio.addEventListener('change', (e) => {
@@ -368,12 +331,10 @@ export class CreationPage extends HTMLElement {
                 // ── Collecte des champs ─────────────────────────────────
                 const titleInput    = form.querySelector('#titleInput');
                 const dateInput     = form.querySelector('#dateInput');
-                const spotsInput    = form.querySelector('#spotsInput');
                 const communeSelect = form.querySelector('#communeSelect');
                 const addressInput  = form.querySelector('#addressInput');
                 const descTextarea  = form.querySelector('textarea');
                 const priceTypeRadio = form.querySelector('input[name="price_type"]:checked');
-                const paidSubRadio   = form.querySelector('input[name="paid_sub_type"]:checked');
                 const amountInput    = form.querySelector('#amountInput');
                 const activePill     = this.querySelector('#categorySelector filter-pill[active], #categorySelector filter-pill.active');
                 const category       = activePill?.dataset?.slug || null;
@@ -405,10 +366,6 @@ export class CreationPage extends HTMLElement {
                 // Date
                 clearError(dateInput, 'dateError');
                 if (!dateInput?.value) { showError(dateInput, 'dateError'); valid = false; }
-
-                // Spots
-                clearError(spotsInput, 'spotsError');
-                if (!spotsInput?.value || parseInt(spotsInput.value) < 1) { showError(spotsInput, 'spotsError'); valid = false; }
 
                 // Commune
                 clearError(communeSelect, 'communeError');
@@ -470,13 +427,15 @@ export class CreationPage extends HTMLElement {
                         commune: communeSelect.value,
                         address: addressInput.value.trim(),
                         event_date: new Date(dateInput.value).toISOString(),
-                        max_spots: parseInt(spotsInput.value),
                         price_type: priceTypeRadio?.value || 'free',
-                        pay_mode: paidSubRadio?.value || null,
                         price_amount: amountInput?.value ? parseInt(amountInput.value) : null,
                         description: descTextarea?.value?.trim() || null,
                         images: uploadedImageUrls,
                     };
+
+                    if (!this._editMode) {
+                        payload.max_spots = DEFAULT_MAX_SPOTS;
+                    }
 
                     if (this._editMode && this._editDesireId) {
                         btn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite;">autorenew</i> Mise à jour...';
@@ -644,9 +603,6 @@ export class CreationPage extends HTMLElement {
                 dateInput.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
             }
 
-            const spotsInput = form.querySelector('#spotsInput');
-            if (spotsInput) spotsInput.value = desire.max_spots || '';
-
             const communeSelect = form.querySelector('#communeSelect');
             if (communeSelect && desire.commune) communeSelect.value = desire.commune;
 
@@ -663,10 +619,6 @@ export class CreationPage extends HTMLElement {
             });
 
             if (desire.price_type === 'paid') {
-                const subRadios = form.querySelectorAll('input[name="paid_sub_type"]');
-                subRadios.forEach(r => {
-                    if (r.value === desire.pay_mode) r.checked = true;
-                });
                 const amountInput = form.querySelector('#amountInput');
                 if (amountInput) amountInput.value = desire.price_amount || '';
             }
