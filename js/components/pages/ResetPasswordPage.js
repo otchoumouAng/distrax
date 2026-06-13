@@ -30,9 +30,7 @@ export class ResetPasswordPage extends HTMLElement {
                 <div class="login-content" style="padding: 20px 24px 40px; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100svh - 80px);">
                     
                     <div class="login-branding" style="text-align: center; margin-bottom: 30px; margin-top: auto;">
-                        <div style="width: 72px; height: 72px; background: linear-gradient(135deg, var(--primary), var(--primary-light)); border-radius: 20px; display: flex; align-items: center; justify-content: center; color: white; margin: 0 auto 20px; box-shadow: 0 10px 25px color-mix(in srgb, var(--primary) 30%, transparent); flex-shrink: 0;">
-                            <i class="material-icons-round" style="font-size: 36px;">key</i>
-                        </div>
+                        <img src="assets/img/logo.png" alt="Distrax Logo" style="width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 20px; box-shadow: 0 10px 25px color-mix(in srgb, var(--primary) 30%, transparent); object-fit: cover;">
                         <h1 style="font-size: 28px; font-weight: 800; color: var(--text-main); margin-bottom: 8px;">Nouveau mot de passe</h1>
                         <p style="color: var(--text-muted); font-size: 15px;">Choisissez un nouveau mot de passe sécurisé</p>
                     </div>
@@ -151,12 +149,7 @@ export class ResetPasswordPage extends HTMLElement {
                 } catch (err) {
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = 'Réinitialiser le mot de passe';
-                    submitBtn.style.background = '#ef4444';
-                    submitBtn.textContent = err.message || 'Erreur';
-                    setTimeout(() => {
-                        submitBtn.style.background = '';
-                        submitBtn.innerHTML = 'Réinitialiser le mot de passe';
-                    }, 3000);
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: err.message || 'Erreur', type: 'error' } }));
                 }
             });
         }
@@ -178,7 +171,10 @@ export class ResetPasswordPage extends HTMLElement {
             if (formEl) formEl.style.display = 'none';
         } else {
             if (noTokenEl) noTokenEl.style.display = 'none';
-            if (formEl) formEl.style.display = 'flex';
+            if (formEl) {
+                formEl.style.display = 'flex';
+                formEl.reset();
+            }
         }
 
         page.style.display = 'block';
@@ -186,7 +182,7 @@ export class ResetPasswordPage extends HTMLElement {
         const btn = this.querySelector('#resetSubmitBtn');
         if (btn) {
             btn.disabled = false;
-            btn.style.background = '';
+            btn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
             btn.innerHTML = 'Réinitialiser le mot de passe';
         }
     }

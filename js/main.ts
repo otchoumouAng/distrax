@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toastEl = document.createElement('div');
     toastEl.id = 'global-toast';
     toastEl.style.cssText = [
-        'position: fixed', 'bottom: 90px', 'left: 50%', 'transform: translateX(-50%) translateY(20px)',
+        'position: fixed', 'top: 20px', 'left: 50%', 'transform: translateX(-50%) translateY(-20px)',
         'background: var(--text-main)', 'color: var(--bg-main)',
         'padding: 12px 20px', 'border-radius: 100px',
         'font-size: 14px', 'font-weight: 600',
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toastEl.style.transform = 'translateX(-50%) translateY(0)';
         _toastTimer = setTimeout(() => {
             toastEl.style.opacity = '0';
-            toastEl.style.transform = 'translateX(-50%) translateY(20px)';
+            toastEl.style.transform = 'translateX(-50%) translateY(-20px)';
         }, 3000);
     }
 
@@ -279,9 +279,15 @@ document.addEventListener('DOMContentLoaded', () => {
             (desireDetailsPage as any).close();
             return;
         }
-        if (_currentPageId === 'profile' || _currentPageId === 'notifications') {
+        if (_currentPageId === 'login' || _currentPageId === 'register' || _currentPageId === 'creation' || _currentPageId === 'profile' || _currentPageId === 'notifications') {
             history.replaceState({ page: 'home' }, '', '#home');
             navigateTo('home', false);
+            return;
+        }
+        
+        if (_currentPageId === 'forgot-password' || _currentPageId === 'reset-password') {
+            history.replaceState({ page: 'login' }, '', '#login');
+            navigateTo('login', false);
             return;
         }
         navigateTo(e.state?.page || 'home', false);
@@ -355,7 +361,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('navigate-register', () => navigateTo('register')); // public
     window.addEventListener('navigate-forgot-password', () => navigateTo('forgot-password'));
     window.addEventListener('navigate-reset-password', () => navigateTo('reset-password'));
-    window.addEventListener('auth-required', () => navigateTo('login'));  // 401 → redirection login
+    window.addEventListener('auth-required', () => {
+        if (_currentPageId !== 'login') navigateTo('login');
+    });
     window.addEventListener('navigate-boost', async (e) => {
         try {
             const { isFeatureEnabled } = await import('./utils/featureFlags.js');

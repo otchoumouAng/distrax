@@ -570,7 +570,7 @@ export class BoostPage extends HTMLElement {
                     launchBtn.style.background = '#ef4444';
                     launchBtn.innerHTML = '<i class="material-icons-round">error</i> Connectez-vous d\'abord';
                     setTimeout(() => {
-                        launchBtn.style.background = '';
+                        launchBtn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                         launchBtn.innerHTML = '<i class="material-icons-round">rocket_launch</i> Lancer le boost';
                         this.dispatchEvent(new CustomEvent('navigate-login', { bubbles: true, composed: true }));
                     }, 1500);
@@ -581,7 +581,7 @@ export class BoostPage extends HTMLElement {
                     launchBtn.style.background = '#ef4444';
                     launchBtn.innerHTML = '<i class="material-icons-round">error</i> Sélectionnez une envie et un plan';
                     setTimeout(() => {
-                        launchBtn.style.background = '';
+                        launchBtn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                         launchBtn.innerHTML = '<i class="material-icons-round">rocket_launch</i> Lancer le boost';
                     }, 2500);
                     return;
@@ -627,7 +627,7 @@ export class BoostPage extends HTMLElement {
                     launchBtn.style.background = '#ef4444';
                     launchBtn.innerHTML = `<i class="material-icons-round">error</i> ${err.message}`;
                     setTimeout(() => {
-                        launchBtn.style.background = '';
+                        launchBtn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                         launchBtn.innerHTML = '<i class="material-icons-round">rocket_launch</i> Lancer le boost';
                     }, 3000);
                 }
@@ -669,7 +669,7 @@ export class BoostPage extends HTMLElement {
         const btn = this.querySelector('#boostLaunchBtn');
         if (btn) {
             btn.disabled = false;
-            btn.style.background = '';
+            btn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
             btn.innerHTML = '<i class="material-icons-round">rocket_launch</i> Lancer le boost';
             btn.classList.remove('boost-launched');
         }

@@ -359,7 +359,7 @@ export class DesireDetailsPage extends HTMLElement {
                     joinBtn.style.background = '#ef4444';
                     setTimeout(() => {
                         joinBtn.textContent = 'Rejoindre';
-                        joinBtn.style.background = '';
+                        joinBtn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                         this.close();
                         document.dispatchEvent(new CustomEvent('navigate-login', { bubbles: true, composed: true }));
                     }, 1500);
@@ -419,7 +419,7 @@ export class DesireDetailsPage extends HTMLElement {
                     joinBtn.style.background = '#ef4444';
                     joinBtn.textContent = err.message || 'Erreur';
                     setTimeout(() => {
-                        joinBtn.style.background = '';
+                        joinBtn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                         joinBtn.innerHTML = originalHTML;
                     }, 2500);
                 }
@@ -433,7 +433,7 @@ export class DesireDetailsPage extends HTMLElement {
         if (!btn) return;
 
         btn.classList.remove('joined', 'creator-badge');
-        btn.style.background = '';
+        btn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
 
         // Masquer la carte organisateur et le footer CTA si c'est le créateur
         const hostCard = this.querySelector('.host-card');

@@ -281,7 +281,7 @@ export class SearchPage extends HTMLElement {
 
                 setTimeout(() => {
                     this.elements.submitBtn.innerHTML = '<i class="material-icons-round">arrow_forward</i>';
-                    this.elements.submitBtn.style.background = '';
+                    this.elements.submitBtn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
                 }, 500);
             }, 400);
         }
