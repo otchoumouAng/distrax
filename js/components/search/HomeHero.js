@@ -15,7 +15,7 @@ export class HomeHero extends HTMLElement {
                     <div class="hero-section-wrapper">
                         <div class="hero-section">
                             <div class="logo-box" style="background: transparent;">
-                                <img src="/assets/img/logo.png" alt="Dystrax" style="width: 100%; height: 100%; object-fit: contain; border-radius: inherit;">
+                                <img src="assets/img/logo.png" alt="Dystrax" style="width: 100%; height: 100%; object-fit: contain; border-radius: inherit;">
                             </div>
                             <p class="hero-text">De quoi avez-vous besoin aujourd'hui ?</p>
                         </div>
