@@ -242,6 +242,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigateTo(pageId: string, pushState = true) {
         if (_isNavigating) return;
 
+        // Auth guard en cours de navigation
+        if (!PUBLIC_PAGES.has(pageId) && !api.isAuthenticated()) {
+            pageId = 'login';
+        }
+
         if (pushState) {
             history.pushState({ page: pageId }, '', `#${pageId}`);
         }
