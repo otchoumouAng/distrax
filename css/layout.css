@@ -117,7 +117,7 @@ body.state-results .search-container {
     align-items: center;
     padding: 6px 16px;
     gap: 12px;
-    min-height: 56px;
+    min-height: 48px;
     margin: 0;
 }
 
@@ -606,4 +606,13 @@ body.state-results .exploration-section {
     .results-footer {
         padding-bottom: 100px;
     }
+}
+
+/* Hide scrollbar for search page */
+.search-page-content, .search-container.active .suggestions-container {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.search-page-content::-webkit-scrollbar, .search-container.active .suggestions-container::-webkit-scrollbar {
+    display: none;
 }

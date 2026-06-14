@@ -295,7 +295,7 @@ export class ExplorationSection extends HTMLElement {
             const joined = await api.getJoinedDesires();
             if (!Array.isArray(joined) || joined.length === 0) return;
 
-            const joinedIds = new Set(joined.map(d => String(d.id)));
+            const joinedMap = new Map(joined.map(d => [String(d.id), d.status || 'pending']));
 
             const grid = this.querySelector('#explorationGrid');
             if (!grid) return;
@@ -305,8 +305,10 @@ export class ExplorationSection extends HTMLElement {
                 if (!cardId) return;
                 // Ne pas écraser le mode 'owner'
                 if (card.getAttribute('mode') === 'owner') return;
-                if (joinedIds.has(cardId)) {
-                    card.setAttribute('mode', 'pending');
+                
+                if (joinedMap.has(cardId)) {
+                    const status = joinedMap.get(cardId);
+                    card.setAttribute('mode', status === 'accepted' ? 'joined' : 'pending');
                 }
             });
         } catch (_) { /* silencieux, pas critique */ }
