@@ -305,7 +305,6 @@ export class ExplorationSection extends HTMLElement {
                 if (!cardId) return;
                 // Ne pas écraser le mode 'owner'
                 if (card.getAttribute('mode') === 'owner') return;
-                
                 if (joinedMap.has(cardId)) {
                     const status = joinedMap.get(cardId);
                     card.setAttribute('mode', status === 'accepted' ? 'joined' : 'pending');

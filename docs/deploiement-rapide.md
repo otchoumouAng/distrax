@@ -358,8 +358,8 @@ curl -I https://dystrax.com
 cd /var/www/dystrax-api
 git pull origin main
 source venv/bin/activate
-pip install -r requirements.txt   # uniquement utile si nouvelles dépendances
-python scripts/setup_db.py        # uniquement utile si nouvelles migrations SQL
+pip install -r requirements.txt   
+python scripts/setup_db.py        
 sudo systemctl restart dystrax-api dystrax-worker
 sudo systemctl status dystrax-api dystrax-worker
 ```
@@ -369,8 +369,8 @@ sudo systemctl status dystrax-api dystrax-worker
 ```bash
 cd /var/www/dystrax-src
 git pull origin main
-npm install                       # uniquement utile si nouvelles dépendances
-npm run build:prod
+sudo npm install                       
+sudo npm run build:prod
 sudo cp -r dist/. /var/www/dystrax/
 sudo chown -R www-data:www-data /var/www/dystrax
 sudo chmod -R 755 /var/www/dystrax

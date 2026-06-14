@@ -104,13 +104,10 @@ export class DesireCard extends HTMLElement {
                 </button>
             `;
         } else if (mode === 'joined') {
-            // Envie rejointe dans le profil — Voir + Annuler
+            // Envie rejointe — Déjà rejoint
             cardActionsHtml = `
-                <button class="view-btn ca-btn ca-btn--view">
-                    <i class="material-icons-round">visibility</i> Voir
-                </button>
-                <button class="leave-btn ca-btn ca-btn--cancel">
-                    <i class="material-icons-round">close</i> Annuler
+                <button class="view-btn ca-btn ca-btn--accepted" style="background:var(--success-bg);color:var(--success);border-color:transparent;">
+                    <i class="material-icons-round">verified</i> Déjà rejoint
                 </button>
             `;
         } else {

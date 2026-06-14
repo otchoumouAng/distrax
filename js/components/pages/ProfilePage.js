@@ -360,7 +360,7 @@ export class ProfilePage extends HTMLElement {
                         const authorPseudo = desire.author?.pseudo || desire.author_pseudo || 'Organisateur';
                         const authorAvatarSafe = resolveImageUrl(desire.author?.avatar_url || desire.author_avatar) || DEFAULT_AVATAR_PATH;
 
-                        const currentMode = desire.status === 'pending' ? 'pending' : 'joined';
+                        const currentMode = (desire.status === 'accepted') ? 'joined' : 'pending';
 
                         joinedList.innerHTML += `
                             <desire-card 
