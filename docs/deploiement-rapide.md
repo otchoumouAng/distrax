@@ -368,7 +368,7 @@ sudo systemctl status dystrax-api dystrax-worker
 
 ```bash
 cd /var/www/dystrax-src
-git pull origin main
+sudo git pull origin main
 sudo npm install                       
 sudo npm run build:prod
 sudo cp -r dist/. /var/www/dystrax/
