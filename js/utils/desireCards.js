@@ -50,6 +50,8 @@ export function timeAgo(isoDate) {
 }
 
 export function buildDesireViewDetail(desire) {
+    const spotsLabel = formatSpotsLabel(desire?.spots_taken, desire?.max_spots);
+    const isFull = spotsLabel === 'Complet';
     return {
         id: desire?.id,
         authorId: desire?.author_id || null,
@@ -59,15 +61,27 @@ export function buildDesireViewDetail(desire) {
         timeAgo: timeAgo(desire?.created_at),
         commune: desire?.commune || 'Abidjan',
         date: formatDesireDate(desire?.event_date),
-        spots: formatSpotsLabel(desire?.spots_taken, desire?.max_spots),
+        spots: spotsLabel,
+        isFull,
         price: formatDesirePrice(desire),
         avatar: desire?.author_avatar_url || DEFAULT_AVATAR_PATH,
         images: Array.isArray(desire?.images) ? desire.images : [],
         description: desire?.description || '',
         price_type: desire?.price_type,
+        category: desire?.category || '',
+        categoryIcon: desire?.category_icon || desire?.category || 'label',
     };
 }
 
+/**
+ * Crée une carte d'envie (synchrone).
+ * L'icône de catégorie est lue depuis `desire.category_icon` fourni par l'API
+ * (table categories, colonne icon) — plus besoin d'appel asynchrone supplémentaire.
+ *
+ * @param {object} desire  - Objet envie retourné par l'API (DesireRead).
+ * @param {object} options - { myUserId, joinedDesireIds, openDetailsOnJoin }
+ * @returns {HTMLElement}  - L'élément <desire-card> prêt à être inséré dans le DOM.
+ */
 export function createDesireCard(desire, options = {}) {
     const {
         myUserId = null,
@@ -94,6 +108,10 @@ export function createDesireCard(desire, options = {}) {
     card.dataset.desireId = desire?.id || '';
     card.dataset.authorId = desire?.author_id || '';
 
+    // Icône de catégorie depuis la colonne `icon` de la table `categories`
+    // (fournie directement par l'API dans desire.category_icon)
+    card.setAttribute('icon', viewDetail.categoryIcon);
+
     if (desire?.id) {
         card.setAttribute('desire-id', desire.id);
     }
@@ -106,8 +124,14 @@ export function createDesireCard(desire, options = {}) {
         card.setAttribute('is-boosted', '');
     }
 
-    if (myUserId && desire?.author_id && myUserId === desire.author_id) {
+    // Mode « complet » : désactive le join
+    if (viewDetail.isFull) {
+        card.setAttribute('mode', 'full');
+    } else if (myUserId && desire?.author_id && myUserId === desire.author_id) {
         card.setAttribute('mode', 'owner');
+    } else if (joinedDesireIds instanceof Map && joinedDesireIds.has(String(desire?.id || ''))) {
+        const status = joinedDesireIds.get(String(desire?.id || ''));
+        card.setAttribute('mode', status === 'accepted' ? 'joined' : 'pending');
     } else if (joinedDesireIds instanceof Set && joinedDesireIds.has(String(desire?.id || ''))) {
         card.setAttribute('mode', 'pending');
     }

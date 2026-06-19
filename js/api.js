@@ -80,6 +80,21 @@ export const api = {
     },
 
     /**
+     * Vérification OTP : POST /auth/verify-otp
+     * @param {string} phone - Numéro de téléphone
+     * @param {string} otpCode - Code OTP reçu par SMS/WhatsApp
+     * @returns {Promise<{message: string}>}
+     */
+    async verifyOtp(phone, otpCode) {
+        const res = await fetch(`${BASE_URL}/auth/verify-otp`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify({ phone, otp_code: otpCode }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
      * Connexion : POST /auth/login (OAuth2PasswordRequestForm)
      * Stocke le JWT en localStorage après succès.
      * @returns {Promise<{access_token, token_type}>}

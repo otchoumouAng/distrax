@@ -253,12 +253,21 @@ export class ProfilePage extends HTMLElement {
             const { api } = await import('../../api.js');
             if (!api.isAuthenticated()) return;
 
-            const [user, myDesires, joined, myBoosts] = await Promise.all([
+            const [user, myDesires, joined, myBoosts, boostFeatures] = await Promise.all([
                 api.getMe(),
                 api.getMyDesires(),
                 api.getJoinedDesires(),
                 api.getMyBoosts().catch(() => []),
+                api.getFeatures('boost').catch(() => null),
             ]);
+
+            const boostActivateFeature = boostFeatures?.features?.find(f => f.slug === 'boost_activate');
+            const isBoostEnabled = boostActivateFeature ? boostActivateFeature.is_active : true;
+
+            const boostBanner = this.querySelector('#boostBanner');
+            if (boostBanner && !isBoostEnabled) {
+                boostBanner.style.display = 'none';
+            }
 
             // Mise à jour du pseudo et de l'avatar
             const nameEl = this.querySelector('.profile-name');
@@ -319,7 +328,8 @@ export class ProfilePage extends HTMLElement {
                                 spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots))}"
                                 images="${escapeHtml(imagesStr)}"
                                 description="${escapeHtml(desire.description || '')}"
-                                show-boost
+                                icon="${escapeHtml(desire.category_icon || desire.category || 'label')}"
+                                ${isBoostEnabled ? 'show-boost' : ''}
                                 ${hasActiveBoost ? 'has-active-boost' : ''}
                                 ${hasActiveBoost ? 'is-boosted' : ''}
                             ></desire-card>
@@ -376,6 +386,7 @@ export class ProfilePage extends HTMLElement {
                                 spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots))}"
                                 images="${escapeHtml(imagesStr)}"
                                 description="${escapeHtml(desire.description || '')}"
+                                icon="${escapeHtml(desire.category_icon || desire.category || 'label')}"
                             ></desire-card>
                         `;
                     });

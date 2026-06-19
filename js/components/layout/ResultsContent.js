@@ -1,6 +1,7 @@
 import { escapeHtml, DEFAULT_AVATAR_PATH } from '../../utils/escapeHtml.js';
 import { formatSpotsLabel } from '../../utils/formatSpots.js';
 
+
 export class ResultsContent extends HTMLElement {
     constructor() {
         super();
@@ -153,18 +154,24 @@ export class ResultsContent extends HTMLElement {
             card.setAttribute('date', new Date(d.event_date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
             card.setAttribute('price', price);
             card.setAttribute('commune', d.commune || 'Abidjan');
-            card.setAttribute('spots', formatSpotsLabel(d.spots_taken, d.max_spots));
+            const spotsLabel = formatSpotsLabel(d.spots_taken, d.max_spots);
+            card.setAttribute('spots', spotsLabel);
             card.setAttribute('btn-text', 'Rejoindre');
             card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
             card.setAttribute('description', d.description || '');
             if (d.view_count != null) card.setAttribute('view-count', String(d.view_count));
             // Mode owner si c'est sa propre envie
-            if (this._myUserId && d.author_id && this._myUserId === d.author_id) {
+            if (spotsLabel === 'Complet') {
+                card.setAttribute('mode', 'full');
+            } else if (this._myUserId && d.author_id && this._myUserId === d.author_id) {
                 card.setAttribute('mode', 'owner');
             }
             card.dataset.authorId = d.author_id || ''; // pour desire-view
             card.dataset.desireId = d.id;
             card.setAttribute('desire-id', d.id); // requis par getAttribute('desire-id') dans DesireCard
+
+            // Icône de catégorie (fournie par l'API via la table categories.icon)
+            card.setAttribute('icon', d.category_icon || d.category || 'label');
             card.addEventListener('desire-joined', (e) => {
                 e.stopPropagation(); // Empêche le toast intempestif
                 document.dispatchEvent(new CustomEvent('view-desire', {
@@ -174,6 +181,34 @@ export class ResultsContent extends HTMLElement {
             });
             cards.insertBefore(card, anchor);
         });
+
+        // Marquer les envies déjà rejointes (asynchrone pour ne pas bloquer l'affichage)
+        import('../../api.js').then(({ api }) => {
+            if (api.isAuthenticated() && !append) {
+                this._markJoinedDesires(api).catch(() => {});
+            }
+        });
+    }
+
+    async _markJoinedDesires(api) {
+        try {
+            const joined = await api.getJoinedDesires();
+            if (!Array.isArray(joined) || joined.length === 0) return;
+
+            const joinedMap = new Map(joined.map(d => [String(d.id), d.status || 'pending']));
+            const cards = this.querySelector('#cardsWrapper');
+            if (!cards) return;
+
+            cards.querySelectorAll('desire-card').forEach(card => {
+                const cardId = String(card.dataset?.desireId || card.getAttribute('desire-id') || '');
+                if (!cardId) return;
+                if (card.getAttribute('mode') === 'owner') return;
+                if (joinedMap.has(cardId)) {
+                    const status = joinedMap.get(cardId);
+                    card.setAttribute('mode', status === 'accepted' ? 'joined' : 'pending');
+                }
+            });
+        } catch (_) { /* silencieux, pas critique */ }
     }
 
     async _loadResults(append = false) {

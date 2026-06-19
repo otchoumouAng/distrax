@@ -222,8 +222,8 @@ export class SearchPage extends HTMLElement {
             const desires = data?.items || data || [];
             
             if (desires.length > 0) {
-                const joinedDesireIds = new Set(
-                    Array.isArray(joinedDesires) ? joinedDesires.map((desire) => String(desire.id)) : []
+                const joinedDesireIds = new Map(
+                    Array.isArray(joinedDesires) ? joinedDesires.map((desire) => [String(desire.id), desire.status || 'pending']) : []
                 );
 
                 grid.replaceChildren(

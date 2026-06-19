@@ -99,7 +99,7 @@ export class DesireCard extends HTMLElement {
         } else if (mode === 'pending') {
             // Demande déjà envoyée — ouvre les détails au clic
             cardActionsHtml = `
-                <button class="view-btn ca-btn ca-btn--pending">
+                <button class="view-btn ca-btn ca-btn--pending" style="background:rgba(245, 158, 11, 0.1);color:#d97706;border-color:transparent;">
                     <i class="material-icons-round">hourglass_top</i> Demande en cours
                 </button>
             `;
@@ -108,6 +108,13 @@ export class DesireCard extends HTMLElement {
             cardActionsHtml = `
                 <button class="view-btn ca-btn ca-btn--accepted" style="background:var(--success-bg);color:var(--success);border-color:transparent;">
                     <i class="material-icons-round">verified</i> Déjà rejoint
+                </button>
+            `;
+        } else if (mode === 'full') {
+            // Envie complète — plus de places
+            cardActionsHtml = `
+                <button class="view-btn ca-btn ca-btn--full" style="background:rgba(239, 68, 68, 0.1);color:#ef4444;border-color:transparent;">
+                    <i class="material-icons-round">block</i> Complet
                 </button>
             `;
         } else {
@@ -298,7 +305,7 @@ export class DesireCard extends HTMLElement {
             detail: {
                 id:          this.getAttribute('desire-id'),
                 authorId:    this.dataset.authorId || null,
-                isJoined:    currentMode === 'joined',
+                isJoined:    currentMode === 'joined' || currentMode === 'pending',
                 title:       this.getAttribute('title')    || '',
                 author:      this.getAttribute('author')   || '',
                 theme:       this.getAttribute('theme')    || 'explore',

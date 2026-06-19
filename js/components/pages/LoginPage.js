@@ -43,7 +43,7 @@ export class LoginPage extends HTMLElement {
                             <label class="form-label">Numéro de téléphone</label>
                             <div style="position: relative;">
                                 <i class="material-icons-round" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-light);">phone</i>
-                                <input type="tel" id="phoneInput" class="form-input" placeholder="Ex: 0102030405" style="padding-left: 48px;" required>
+                                <input type="tel" id="phoneInput" class="form-input" placeholder="Ex: +2250102030405" style="padding-left: 48px;" required>
                             </div>
                         </div>
 

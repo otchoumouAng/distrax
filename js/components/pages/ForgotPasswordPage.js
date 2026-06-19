@@ -32,7 +32,7 @@ export class ForgotPasswordPage extends HTMLElement {
                                 <label class="form-label">Numéro de téléphone</label>
                                 <div style="position: relative;">
                                     <i class="material-icons-round" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-light);">phone</i>
-                                    <input type="tel" id="forgotPhoneInput" class="form-input" placeholder="Ex: 0102030405" style="padding-left: 48px;" required>
+                                    <input type="tel" id="forgotPhoneInput" class="form-input" placeholder="Ex: +2250102030405" style="padding-left: 48px;" required>
                                 </div>
                             </div>
                             <button type="submit" id="forgotSubmitBtn" style="background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: white; border: none; padding: 18px; border-radius: 16px; font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: all 0.2s; box-shadow: 0 8px 25px color-mix(in srgb, var(--primary) 40%, transparent); margin-top: 8px;">

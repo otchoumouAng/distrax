@@ -37,6 +37,26 @@
 
 <body>
 
+    <!-- Écran de blocage desktop — visible uniquement sur écrans > 768px via CSS -->
+    <div id="desktop-only-wall" aria-hidden="true">
+        <div class="dow-card">
+            <div class="dow-phone-wrap">
+                <div class="dow-phone">
+                    <div class="dow-phone-screen">
+                        <div class="dow-phone-dot"></div>
+                    </div>
+                </div>
+                <div class="dow-signal dow-signal--1"></div>
+                <div class="dow-signal dow-signal--2"></div>
+                <div class="dow-signal dow-signal--3"></div>
+            </div>
+            <h1 class="dow-title">Application mobile</h1>
+            <p class="dow-desc">Dystrax est conçu pour une expérience mobile.<br>Scannez le QR code ou ouvrez ce lien sur votre téléphone.</p>
+            <div class="dow-qr" id="dowQr" title="Ouvrir sur mobile"></div>
+            <p class="dow-hint">Disponible sur iOS &amp; Android</p>
+        </div>
+    </div>
+
     <div class="aurora-bg"></div>
 
     <!-- Nos Web Components globaux -->
@@ -72,6 +92,22 @@
 
     <!-- Le point d'entrée Vite qui importera et définira tous les composants -->
     <script type="module" src="js/main.ts"></script>
+
+    <!-- QR code pour le desktop-only wall -->
+    <script>
+        (function () {
+            if (window.innerWidth < 769) return;
+            var qrEl = document.getElementById('dowQr');
+            if (!qrEl) return;
+            var url = encodeURIComponent(window.location.href);
+            var img = document.createElement('img');
+            img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + url;
+            img.alt = 'QR Code';
+            img.width = 120;
+            img.height = 120;
+            qrEl.appendChild(img);
+        })();
+    </script>
 </body>
 
 </html>

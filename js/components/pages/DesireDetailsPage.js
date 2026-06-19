@@ -10,6 +10,7 @@ export class DesireDetailsPage extends HTMLElement {
         this._desireId = null;  // ID de l'envie actuellement affichée
         this._isCreator = false; // si l'utilisateur est le créateur
         this._hasJoined = false; // si l'utilisateur a déjà rejoint
+        this._isFull = false;    // si l'envie est complète
         /** Position de scroll sauvegardée pour restaurer à la fermeture (body lock). */
         this._savedScrollY = 0;
     }
@@ -220,15 +221,15 @@ export class DesireDetailsPage extends HTMLElement {
                 }
                 .join-action-btn:active { transform: scale(0.97); opacity: 1; }
                 .join-action-btn.joined {
-                    background: transparent;
+                    background: rgba(239, 68, 68, 0.1);
                     border: none;
                     color: #ef4444;
                     box-shadow: none;
                     font-size: 13px;
-                    font-weight: 500;
+                    font-weight: 600;
                 }
                 .join-action-btn.joined:hover {
-                    background: rgba(239,68,68,0.06);
+                    background: rgba(239, 68, 68, 0.15);
                     opacity: 1;
                 }
                 .join-action-btn.creator-badge {
@@ -442,6 +443,14 @@ export class DesireDetailsPage extends HTMLElement {
 
         if (this._isCreator) {
             if (footer) footer.style.display = 'none';
+        } else if (this._isFull) {
+            // Envie complète : bouton désactivé
+            if (footer) footer.style.display = '';
+            btn.style.background = 'linear-gradient(135deg, #fef2f2, #fee2e2)';
+            btn.style.color = '#dc2626';
+            btn.style.cursor = 'default';
+            btn.style.pointerEvents = 'none';
+            btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;">block</i> Complet';
         } else if (this._isRejected) {
             // Refusé : masquer le footer, l'envie sera retirée de la liste
             if (footer) footer.style.display = 'none';
@@ -461,6 +470,9 @@ export class DesireDetailsPage extends HTMLElement {
             btn.innerHTML = '<i class="material-icons-round" style="font-size: 16px;">close</i> Annuler';
         } else {
             if (footer) footer.style.display = '';
+            btn.style.pointerEvents = 'auto';
+            btn.style.cursor = 'pointer';
+            btn.style.color = 'white';
             btn.innerHTML = 'Rejoindre';
         }
     }
@@ -487,6 +499,7 @@ export class DesireDetailsPage extends HTMLElement {
         }
         this._isCreator = false;
         this._hasJoined = false;
+        this._isFull = false;
         this._isRejected = false;
         this._isAccepted = false;
 
@@ -624,6 +637,10 @@ export class DesireDetailsPage extends HTMLElement {
                 // —— Mode créateur : afficher les intéressés ——
                 participantsSection?.classList.add('visible');
                 this._loadParticipants(api);
+            } else if (data.spots === 'Complet') {
+                // —— Envie complète ——
+                participantsSection?.classList.remove('visible');
+                this._isFull = true;
             } else {
                 // —— Mode participant : vérifier statut (pending/accepted/rejected) ——
                 participantsSection?.classList.remove('visible');

@@ -2150,3 +2150,52 @@ body.state-results .results-content {
 .notifications-load-more-btn .notifications-load-more-label {
     flex: 0 1 auto;
 }
+/* --- FORM INPUTS --- */
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.form-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.form-input {
+    width: 100%;
+    height: 52px;
+    padding: 0 16px;
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card, #ffffff);
+    color: var(--text-main);
+    font-size: 15px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.form-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.form-input::placeholder {
+    color: var(--text-light);
+}
+
+[data-theme="dark"] .form-input {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+select.form-input, textarea.form-input {
+    background: var(--bg-card, #ffffff);
+}
+textarea.form-input {
+    padding-top: 16px;
+    height: auto;
+    resize: vertical;
+}

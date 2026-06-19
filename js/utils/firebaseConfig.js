@@ -16,7 +16,11 @@ let messaging;
 
 export function initFirebase() {
     if (!firebaseConfig.apiKey) {
-        console.warn('Firebase non configuré (VITE_FIREBASE_API_KEY manquant).');
+        console.warn(
+            'Firebase non configuré — les notifications push sont désactivées.\n' +
+            'Pour les activer, renseignez VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID,\n' +
+            'VITE_FIREBASE_APP_ID et VITE_FIREBASE_MESSAGING_SENDER_ID dans .env.dev ou .env.prod.'
+        );
         return;
     }
 

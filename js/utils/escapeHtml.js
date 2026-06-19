@@ -16,10 +16,10 @@ export function safeUrl(url) {
     return '';
 }
 
-/** Chemin de l’image de profil par défaut (silhouette) quand l’utilisateur n’a pas de photo. */
-export const DEFAULT_AVATAR_PATH = '/assets/img/avatar.svg';
-
-/** Data URI pour avatar par défaut (même silhouette) en fallback si l’asset ne charge pas. */
+/** Data URI pour avatar par défaut : icône Material "person" sur fond cercle gris. */
 export const DEFAULT_AVATAR_DATA_URI = 'data:image/svg+xml,' + encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="32" cy="20" r="10"/><path d="M12 58c0-11 8.954-20 20-20s20 9 20 20"/></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#e5e7eb"/><path d="M32 34c3.31 0 6-2.69 6-6s-2.69-6-6-6-6 2.69-6 6 2.69 6 6 6zm0 3c-4 0-12 2-12 6v3h24v-3c0-4-8-6-12-6z" fill="#9ca3af"/></svg>'
 );
+
+/** Alias rétrocompatible — même data URI inline (plus de fichier avatar.svg). */
+export const DEFAULT_AVATAR_PATH = DEFAULT_AVATAR_DATA_URI;

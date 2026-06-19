@@ -1,7 +1,14 @@
 import { api } from '../api.js';
 
+// Singleton GSI : google.accounts.id.initialize() ne doit être appelé qu'une seule fois.
+let _gsiInitialized = false;
+let _onLoginSuccess = null;
+let _onLoginError = null;
+
 /**
- * Initialise Google Identity Services
+ * Initialise Google Identity Services (appelable plusieurs fois sans effet négatif —
+ * seule la première initialisation effective est conservée, les appels suivants
+ * mettent simplement à jour les callbacks).
  * @param {Function} onLoginSuccess Callback appelé quand le backend a validé le token et renvoyé le JWT
  * @param {Function} onLoginError Callback appelé en cas d'erreur
  */
@@ -18,16 +25,23 @@ export function initializeGoogleAuth(onLoginSuccess, onLoginError) {
         return false;
     }
 
+    // Mettre à jour les callbacks pour pointer vers la page active
+    _onLoginSuccess = onLoginSuccess;
+    _onLoginError = onLoginError;
+
+    // Éviter l'initialisation multiple : GSI ne supporte qu'un seul initialize()
+    if (_gsiInitialized) return true;
+
+    _gsiInitialized = true;
     window.google.accounts.id.initialize({
         client_id: clientId,
         callback: async (response) => {
             try {
-                // response.credential contient l'id_token signé par Google
                 const data = await api.loginWithGoogle(response.credential);
-                if (onLoginSuccess) onLoginSuccess(data);
+                if (_onLoginSuccess) _onLoginSuccess(data);
             } catch (err) {
                 console.error('Erreur lors de la vérification Google sur le backend:', err);
-                if (onLoginError) onLoginError(err);
+                if (_onLoginError) _onLoginError(err);
             }
         }
     });
