@@ -1,5 +1,6 @@
+import { formatSpotsLabel, isValidSpotsSelection } from '../../utils/formatSpots.js';
 
-const DEFAULT_MAX_SPOTS = 100; // "Tout le monde"
+const UNLIMITED_MAX_SPOTS = 100; // Compatibilité API : la limite est ignorée si is_unlimited=true.
 const TOTAL_STEPS = 4;
 
 // Raccourcis de date
@@ -107,6 +108,7 @@ export class CreationPage extends HTMLElement {
                 .cr-price-opt:hover { border-color: var(--primary); }
                 .cr-price-opt.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg-card)); }
                 .cr-price-opt i { font-size: 20px; }
+                .cr-price-toggle.field-error .cr-price-opt { border-color: #ef4444; }
                 .cr-price-amount-wrap { display: none; position: relative; margin-top: -4px; }
                 .cr-price-amount-wrap.visible { display: block; }
                 .cr-price-amount-wrap .cr-input { padding-right: 52px; }
@@ -261,7 +263,7 @@ export class CreationPage extends HTMLElement {
                         <div class="cr-field">
                             <label class="cr-field-label">Nombre de personnes</label>
                             <div class="cr-price-toggle">
-                                <button type="button" class="cr-price-opt selected" data-spots="unlimited" id="crSpotsUnlimited">
+                                <button type="button" class="cr-price-opt" data-spots="unlimited" id="crSpotsUnlimited">
                                     <i class="material-icons-round">public</i> Tout le monde
                                 </button>
                                 <button type="button" class="cr-price-opt" data-spots="limited" id="crSpotsLimited">
@@ -272,6 +274,7 @@ export class CreationPage extends HTMLElement {
                                 <input id="crMaxSpotsInput" type="number" class="cr-input" placeholder="Nombre max" min="1" max="100" step="1">
                                 <span class="cr-currency">pers.</span>
                             </div>
+                            <span class="cr-field-error" id="crSpotsError">Choisis « Tout le monde » ou indique un nombre entre 1 et 100.</span>
                         </div>
                         <div class="cr-field">
                             <label class="cr-field-label">Détails supplémentaires</label>
@@ -385,6 +388,10 @@ export class CreationPage extends HTMLElement {
         // Spots toggle
         this._spotsUnlimited.addEventListener('click', () => this._setSpotsType('unlimited'));
         this._spotsLimited.addEventListener('click', () => this._setSpotsType('limited'));
+        this._maxSpotsInput.addEventListener('input', () => {
+            this._maxSpotsInput.classList.remove('field-error');
+            this.querySelector('#crSpotsError')?.classList.remove('visible');
+        });
 
         // Categories exclusive
         this._categorySelector.addEventListener('click', (e) => {
@@ -507,6 +514,22 @@ export class CreationPage extends HTMLElement {
         clearErr(this._addressInput, addrErr);
         if (!this._addressInput.value.trim()) { showErr(this._addressInput, addrErr); valid = false; }
 
+        const spotsErr = this.querySelector('#crSpotsError');
+        const spotsToggle = this._spotsUnlimited.closest('.cr-price-toggle');
+        const isUnlimited = this._spotsUnlimited.classList.contains('selected');
+        const isLimited = this._spotsLimited.classList.contains('selected');
+        const maxSpots = Number(this._maxSpotsInput.value);
+        spotsToggle?.classList.remove('field-error');
+        clearErr(this._maxSpotsInput, spotsErr);
+        if (!isUnlimited && !isLimited) {
+            spotsToggle?.classList.add('field-error');
+            spotsErr?.classList.add('visible');
+            valid = false;
+        } else if (!isValidSpotsSelection(isUnlimited, isLimited, maxSpots)) {
+            showErr(this._maxSpotsInput, spotsErr);
+            valid = false;
+        }
+
         if (!valid) {
             const firstErr = this._body.querySelector('.cr-step.active .field-error');
             firstErr?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -582,6 +605,9 @@ export class CreationPage extends HTMLElement {
         this._spotsLimited.classList.toggle('selected', type === 'limited');
         this._spotsInputWrap.classList.toggle('visible', type === 'limited');
         if (type === 'unlimited') this._maxSpotsInput.value = '';
+        this._spotsUnlimited.closest('.cr-price-toggle')?.classList.remove('field-error');
+        this._maxSpotsInput.classList.remove('field-error');
+        this.querySelector('#crSpotsError')?.classList.remove('visible');
     }
 
     /* ── Date shortcuts ── */
@@ -652,10 +678,9 @@ export class CreationPage extends HTMLElement {
         const avatarHtml = '<span class="cr-avatar-icon"><i class="material-icons-round">person</i></span>';
 
         // Spots
-        const maxSpots = this._spotsLimited.classList.contains('selected')
-            ? (parseInt(this._maxSpotsInput.value) || DEFAULT_MAX_SPOTS)
-            : DEFAULT_MAX_SPOTS;
-        const spotsHtml = `<span class="spots-left">0 / ${maxSpots} places</span>`;
+        const isUnlimited = this._spotsUnlimited.classList.contains('selected');
+        const maxSpots = isUnlimited ? UNLIMITED_MAX_SPOTS : parseInt(this._maxSpotsInput.value);
+        const spotsHtml = `<span class="spots-left">${formatSpotsLabel(0, maxSpots, isUnlimited)}</span>`;
 
         // Build the real desire-card HTML
         const wrap = this.querySelector('#crPreviewWrap');
@@ -723,6 +748,7 @@ export class CreationPage extends HTMLElement {
             const activeCat = this._categorySelector.querySelector('filter-pill[active], filter-pill.active');
             const activeCommune = this._communeSelector.querySelector('filter-pill[active], filter-pill.active');
             const priceType = this._pricePaid.classList.contains('selected') ? 'paid' : 'free';
+            const isUnlimited = this._spotsUnlimited.classList.contains('selected');
 
             const payload = {
                 title: this._titleInput.value.trim(),
@@ -734,9 +760,8 @@ export class CreationPage extends HTMLElement {
                 price_amount: this._amountInput.value ? parseInt(this._amountInput.value) : null,
                 description: this._descTextarea.value.trim() || null,
                 images: uploadedImageUrls,
-                max_spots: this._spotsLimited.classList.contains('selected')
-                    ? (parseInt(this._maxSpotsInput.value) || DEFAULT_MAX_SPOTS)
-                    : DEFAULT_MAX_SPOTS,
+                max_spots: isUnlimited ? UNLIMITED_MAX_SPOTS : parseInt(this._maxSpotsInput.value),
+                is_unlimited: isUnlimited,
             };
 
             if (this._editMode && this._editDesireId) {
@@ -756,6 +781,12 @@ export class CreationPage extends HTMLElement {
                 btn.style.background = '#10b981';
                 btn.innerHTML = '<i class="material-icons-round">check</i> Publié !';
                 const newId = created?.id ?? created?.data?.id;
+
+                // Demande contextuelle d'autorisation push (OPT-03)
+                import('../../utils/firebaseConfig.js')
+                    .then(({ offerPushOptIn }) => offerPushOptIn('Sois averti dès que quelqu\'un souhaite rejoindre ton envie.'))
+                    .catch(() => {});
+
                 setTimeout(() => this._resetAndNavigate(newId, false), 1200);
             }
         } catch (err) {
@@ -794,7 +825,7 @@ export class CreationPage extends HTMLElement {
         this._descTextarea.value = '';
         this._amountInput.value = '';
         this._setPriceType('free');
-        this._setSpotsType('unlimited');
+        this._setSpotsType(null);
 
         // Reset photo (resetAndNavigate)
         this._photoZone.style.backgroundImage = 'none';
@@ -989,8 +1020,12 @@ export class CreationPage extends HTMLElement {
                 if (this._amountInput && desire.price_amount) this._amountInput.value = desire.price_amount;
             }
 
-            // Max spots
-            if (desire.max_spots != null && desire.max_spots < DEFAULT_MAX_SPOTS) {
+            // Capacité : la propriété explicite distingue illimité de « limité à 100 ».
+            const isUnlimited = desire.is_unlimited === true
+                || (desire.is_unlimited == null && desire.max_spots === UNLIMITED_MAX_SPOTS);
+            if (isUnlimited) {
+                this._setSpotsType('unlimited');
+            } else if (desire.max_spots != null) {
                 this._setSpotsType('limited');
                 if (this._maxSpotsInput) this._maxSpotsInput.value = desire.max_spots;
             }
@@ -1058,7 +1093,7 @@ export class CreationPage extends HTMLElement {
         if (this._descTextarea) this._descTextarea.value = '';
         if (this._amountInput) this._amountInput.value = '';
         this._setPriceType('free');
-        if (this._spotsUnlimited && this._spotsLimited) this._setSpotsType('unlimited');
+        if (this._spotsUnlimited && this._spotsLimited) this._setSpotsType(null);
 
         // Reset photo
         this._photoZone.style.backgroundImage = 'none';

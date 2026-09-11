@@ -127,7 +127,7 @@ export class ResultsContent extends HTMLElement {
         const footer = this.querySelector('.results-footer');
         if (!loadMoreArea || !loadMoreBtn) return;
         const hasCards = this.querySelectorAll('#cardsWrapper desire-card').length > 0;
-        const hasQueryOrFilters = this._lastQuery || this._lastFilters.commune || this._lastFilters.price_type || this._lastFilters.category;
+        const hasQueryOrFilters = this._lastQuery || this._lastFilters.commune || this._lastFilters.price_type || this._lastFilters.category || this._lastFilters.date;
         loadMoreArea.style.display = hasQueryOrFilters && hasCards ? 'block' : 'none';
         loadMoreBtn.disabled = this._loading;
         loadMoreBtn.textContent = this._loading ? 'Chargement...' : 'Voir plus';
@@ -154,7 +154,7 @@ export class ResultsContent extends HTMLElement {
             card.setAttribute('date', new Date(d.event_date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
             card.setAttribute('price', price);
             card.setAttribute('commune', d.commune || 'Abidjan');
-            const spotsLabel = formatSpotsLabel(d.spots_taken, d.max_spots);
+            const spotsLabel = formatSpotsLabel(d.spots_taken, d.max_spots, d.is_unlimited);
             card.setAttribute('spots', spotsLabel);
             card.setAttribute('btn-text', 'Rejoindre');
             card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
@@ -172,10 +172,12 @@ export class ResultsContent extends HTMLElement {
 
             // Icône de catégorie (fournie par l'API via la table categories.icon)
             card.setAttribute('icon', d.category_icon || d.category || 'label');
+            // Badge de cycle de vie (CAT-04)
+            if (d.desire_status) card.setAttribute('desire-status', d.desire_status);
             card.addEventListener('desire-joined', (e) => {
                 e.stopPropagation(); // Empêche le toast intempestif
                 document.dispatchEvent(new CustomEvent('view-desire', {
-                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: formatSpotsLabel(d.spots_taken, d.max_spots), price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description },
+                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, address: d.address, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: formatSpotsLabel(d.spots_taken, d.max_spots, d.is_unlimited), price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description },
                     bubbles: true, composed: true,
                 }));
             });
@@ -214,7 +216,7 @@ export class ResultsContent extends HTMLElement {
     async _loadResults(append = false) {
         if (this._loading) return;
         if (append && !this._hasMore) return;
-        const hasQueryOrFilters = this._lastQuery || this._lastFilters.commune || this._lastFilters.price_type || this._lastFilters.category;
+        const hasQueryOrFilters = this._lastQuery || this._lastFilters.commune || this._lastFilters.price_type || this._lastFilters.category || this._lastFilters.date;
         if (!hasQueryOrFilters) return;
         this._loading = true;
         this._updateLoadMoreUi();
@@ -363,7 +365,8 @@ export class ResultsContent extends HTMLElement {
         this._lastFilters = {
             category: filters.category || undefined,
             commune: filters.commune || undefined,
-            price_type: filters.price_type || undefined
+            price_type: filters.price_type || undefined,
+            date: filters.date || undefined
         };
         this._myUserId = null;
         this._currentPage = 1;

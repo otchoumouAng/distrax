@@ -139,10 +139,8 @@ export class LoginPage extends HTMLElement {
                         btn.innerHTML = "Connexion";
                         btn.disabled = false;
 
-                        // Demande d'autorisation pour les notifications push
-                        import('../../utils/firebaseConfig.js').then(({ requestNotificationPermissionAndRegister }) => {
-                            requestNotificationPermissionAndRegister().catch(() => {});
-                        });
+                        // La demande d'autorisation push est désormais contextuelle
+                        // (après avoir rejoint ou publié une envie), jamais après connexion.
 
                         // user-logged-in force le rechargement de l'exploration avec le bon userId
                         window.dispatchEvent(new CustomEvent('user-logged-in'));

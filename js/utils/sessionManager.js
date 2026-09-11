@@ -4,14 +4,20 @@
  * Comportement :
  *  - Démarre dès que l'utilisateur est connecté.
  *  - Réinitialise le timer à chaque interaction (click, toucher, frappe, scroll).
- *  - Après INACTIVITY_MS (10 min) sans activité :
+ *  - Après INACTIVITY_MS sans activité :
  *      1. Sauvegarde le numéro de téléphone pour pré-remplissage.
  *      2. Déconnecte l'utilisateur (supprime le token).
  *      3. Dispatch 'session-expired' avec { phone } pour la page de login.
  *      4. Toast d'information.
  */
 
-const INACTIVITY_MS = 10 * 60 * 1000; // 10 minutes
+// Le JWT backend a une durée de vie longue (~7 jours). On aligne l'inactivité
+// sur cette durée pour ne plus déconnecter prématurément : une notification push
+// reçue plusieurs heures (voire plusieurs jours) après la dernière visite doit
+// retrouver l'utilisateur encore connecté. Une coupure à 10 min rendait le
+// retour depuis une notification impossible (SES-01 / SES-02).
+const INACTIVITY_DAYS = 7;
+const INACTIVITY_MS = INACTIVITY_DAYS * 24 * 60 * 60 * 1000;
 
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keypress', 'touchstart', 'scroll', 'click'];
 
@@ -37,7 +43,7 @@ async function _expire() {
         stop(); // arrêter le gestionnaire
 
         window.dispatchEvent(new CustomEvent('show-toast', {
-            detail: { message: 'Session expirée après 10 min d\'inactivité.', type: 'info' }
+            detail: { message: `Session expirée après ${INACTIVITY_DAYS} jours d'inactivité.`, type: 'info' }
         }));
 
         window.dispatchEvent(new CustomEvent('session-expired', {

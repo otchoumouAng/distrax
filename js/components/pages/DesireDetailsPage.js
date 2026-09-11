@@ -11,6 +11,9 @@ export class DesireDetailsPage extends HTMLElement {
         this._isCreator = false; // si l'utilisateur est le créateur
         this._hasJoined = false; // si l'utilisateur a déjà rejoint
         this._isFull = false;    // si l'envie est complète
+        this._isCancelled = false; // si l'activité a été annulée (NAV-06)
+        this._isAccepted = false;  // accepté, présence pas encore confirmée (PAR-08)
+        this._isConfirmed = false; // présence confirmée (PAR-08)
         /** Position de scroll sauvegardée pour restaurer à la fermeture (body lock). */
         this._savedScrollY = 0;
     }
@@ -138,6 +141,14 @@ export class DesireDetailsPage extends HTMLElement {
                 .m-tag i { font-size: 16px; color: var(--text-main); }
                 [data-theme="dark"] .m-tag { background: color-mix(in srgb, var(--text-main) 5%, transparent); }
 
+                /* Informations pratiques : lieu exact + itinéraire (PAR-16) */
+                .address-line { align-items: center; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-light); font-size: 13px; color: var(--text-main); }
+                .address-line > i { font-size: 18px; color: var(--text-muted); flex-shrink: 0; }
+                .address-line #dAddress { flex: 1; min-width: 0; line-height: 1.4; }
+                .address-route-btn { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 6px 12px; border-radius: 100px; background: var(--primary); color: white; font-size: 12px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+                .address-route-btn i { font-size: 15px; }
+                [data-theme="dark"] .address-line { background: color-mix(in srgb, var(--text-main) 5%, transparent); }
+
                 .host-card { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-light); }
                 .host-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
                 .host-info h4 { margin: 0; font-size: 15px; color: var(--text-main); }
@@ -241,6 +252,38 @@ export class DesireDetailsPage extends HTMLElement {
                 }
 
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+                /* —— État annulé (NAV-06) —— */
+                .cancelled-banner {
+                    display: none; flex-direction: column; gap: 10px;
+                    padding: 16px; border-radius: 16px;
+                    background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+                }
+                [data-theme="dark"] .cancelled-banner {
+                    background: color-mix(in srgb, #ef4444 14%, transparent);
+                    border-color: color-mix(in srgb, #ef4444 40%, transparent);
+                    color: #fca5a5;
+                }
+                .cancelled-banner-head { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; }
+                .cancelled-banner-head i { font-size: 22px; }
+                .cancelled-banner p { margin: 0; font-size: 13px; line-height: 1.5; }
+                .cancelled-banner-btn {
+                    align-self: flex-start; margin-top: 4px;
+                    padding: 8px 16px; border-radius: 100px; border: none;
+                    background: var(--primary); color: white;
+                    font-size: 13px; font-weight: 600; cursor: pointer;
+                }
+
+                /* Mise en évidence des champs modifiés (NAV-05) */
+                .field-changed {
+                    animation: fieldPulse 1.2s ease-in-out 3;
+                    border-radius: 100px;
+                    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, transparent);
+                }
+                @keyframes fieldPulse {
+                    0%, 100% { background-color: transparent; }
+                    50% { background-color: color-mix(in srgb, var(--primary) 22%, transparent); }
+                }
             </style>
             <div class="details-overlay" id="detailsOverlay"></div>
             <div class="details-page" id="desireDetailsPage">
@@ -257,12 +300,31 @@ export class DesireDetailsPage extends HTMLElement {
 
                 <div class="details-body">
                     <h1 class="details-title" id="dTitle">Atelier de poterie et création artisanale</h1>
+
+                    <!-- État annulé (NAV-06) -->
+                    <div class="cancelled-banner" id="dCancelledState">
+                        <div class="cancelled-banner-head">
+                            <i class="material-icons-round">event_busy</i>
+                            <span>Activité annulée</span>
+                        </div>
+                        <p>L'organisateur a annulé cette envie. Découvre d'autres activités près de toi.</p>
+                        <button class="cancelled-banner-btn" id="cancelledAlternativesBtn" type="button">Voir d'autres envies</button>
+                    </div>
                     
                     <div class="meta-tags" id="dMeta">
                         <span class="m-tag"><i class="material-icons-round">location_on</i> <span id="dCommune">Plateau</span></span>
                         <span class="m-tag"><i class="material-icons-round">calendar_today</i> <span id="dDate">Samedi, 14:00</span></span>
                         <span class="m-tag"><i class="material-icons-round">group</i> <span id="dSpots">Reste 5 places</span></span>
                         <span class="m-tag" id="dViewCountWrap" style="display: none;"><i class="material-icons-round">visibility</i> <span id="dViewCountNum">0</span> vues</span>
+                    </div>
+
+                    <div class="address-line" id="dAddressWrap" style="display: none;">
+                        <i class="material-icons-round">place</i>
+                        <span id="dAddress"></span>
+                        <a class="address-route-btn" id="dItinerary" href="#" target="_blank" rel="noopener" aria-label="Ouvrir l'itinéraire">
+                            <i class="material-icons-round">directions</i>
+                            <span>Itinéraire</span>
+                        </a>
                     </div>
 
                     <div class="host-card">
@@ -327,6 +389,18 @@ export class DesireDetailsPage extends HTMLElement {
             shareBtn.addEventListener('click', () => this._handleShare());
         }
 
+        // NAV-06 : depuis l'état annulé, proposer des envies alternatives.
+        const alternativesBtn = this.querySelector('#cancelledAlternativesBtn');
+        if (alternativesBtn) {
+            alternativesBtn.addEventListener('click', () => {
+                this.close();
+                window.dispatchEvent(new CustomEvent('navigate-home', { bubbles: true, composed: true }));
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('scroll-to-explore', { bubbles: true, composed: true }));
+                }, 150);
+            });
+        }
+
         const overlay = this.querySelector('#detailsOverlay');
         if (overlay) {
             overlay.addEventListener('click', () => {
@@ -369,6 +443,28 @@ export class DesireDetailsPage extends HTMLElement {
 
                 const isLeaving = this._hasJoined;
 
+                // ── Confirmer la présence après acceptation (PAR-08) ──
+                if (this._isAccepted && !this._isConfirmed) {
+                    joinBtn.disabled = true;
+                    joinBtn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite; vertical-align: middle;">autorenew</i> En cours...';
+                    try {
+                        await api.confirmPresence(this._desireId);
+                        this._isConfirmed = true;
+                        this._isAccepted = false;
+                        joinBtn.disabled = false;
+                        this._updateJoinButton(joinBtn);
+                        window.dispatchEvent(new CustomEvent('show-toast', {
+                            detail: { message: 'Votre présence est confirmée.', type: 'success' }
+                        }));
+                    } catch (err) {
+                        joinBtn.disabled = false;
+                        joinBtn.style.background = '#ef4444';
+                        joinBtn.textContent = err.message || 'Erreur';
+                        setTimeout(() => this._updateJoinButton(joinBtn), 2500);
+                    }
+                    return;
+                }
+
                 // Demander confirmation avant de quitter
                 if (isLeaving) {
                     const { showConfirm } = await import('../../utils/confirm.js');
@@ -410,6 +506,11 @@ export class DesireDetailsPage extends HTMLElement {
                             detail: { desireId: this._desireId }
                         }));
 
+                        // Demande contextuelle d'autorisation push (OPT-02)
+                        import('../../utils/firebaseConfig.js')
+                            .then(({ offerPushOptIn }) => offerPushOptIn('Sois averti dès que l\'organisateur répond à ta demande.'))
+                            .catch(() => {});
+
                         setTimeout(() => {
                             this._updateJoinButton(joinBtn);
                             this.close();
@@ -441,6 +542,15 @@ export class DesireDetailsPage extends HTMLElement {
         if (hostCard) hostCard.style.display = this._isCreator ? 'none' : '';
         const footer = this.querySelector('.details-footer');
 
+        // NAV-06 : une activité annulée n'offre plus aucune action d'inscription.
+        const cancelledBanner = this.querySelector('#dCancelledState');
+        if (this._isCancelled) {
+            if (cancelledBanner) cancelledBanner.style.display = 'flex';
+            if (footer) footer.style.display = 'none';
+            return;
+        }
+        if (cancelledBanner) cancelledBanner.style.display = 'none';
+
         if (this._isCreator) {
             if (footer) footer.style.display = 'none';
         } else if (this._isFull) {
@@ -456,14 +566,24 @@ export class DesireDetailsPage extends HTMLElement {
             if (footer) footer.style.display = 'none';
             // Retirer les cartes joined correspondantes dans le profil et l'exploration
             window.dispatchEvent(new CustomEvent('desire-rejected', { detail: { desireId: this._desireId } }));
-        } else if (this._isAccepted) {
-            // Accepté : afficher info non-cliquable
+        } else if (this._isConfirmed) {
+            // Présence confirmée : information non-cliquable (PAR-08)
             if (footer) footer.style.display = '';
             btn.classList.remove('joined');
             btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+            btn.style.color = 'white';
             btn.style.cursor = 'default';
             btn.style.pointerEvents = 'none';
-            btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;">verified</i> Participation confirmée';
+            btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;">verified</i> Présence confirmée';
+        } else if (this._isAccepted) {
+            // Accepté mais présence non confirmée : action demandée (PAR-08)
+            if (footer) footer.style.display = '';
+            btn.classList.remove('joined');
+            btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+            btn.style.color = 'white';
+            btn.style.cursor = 'pointer';
+            btn.style.pointerEvents = 'auto';
+            btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;">how_to_reg</i> Je confirme ma présence';
         } else if (this._hasJoined) {
             if (footer) footer.style.display = '';
             btn.classList.add('joined');
@@ -491,6 +611,8 @@ export class DesireDetailsPage extends HTMLElement {
     }
 
     async open(data) {
+        const focus = data?.focus || null;
+        const notificationType = data?.notificationType || null;
         // Normaliser l'ID — rejeter null / 'null' / undefined / vide
         const rawId = data.id || data.desireId || data.desire_id || null;
         this._desireId = (rawId && rawId !== 'null' && rawId !== 'undefined') ? rawId : null;
@@ -500,8 +622,10 @@ export class DesireDetailsPage extends HTMLElement {
         this._isCreator = false;
         this._hasJoined = false;
         this._isFull = false;
+        this._isCancelled = false;
         this._isRejected = false;
         this._isAccepted = false;
+        this._isConfirmed = false;
 
         // Si on n'a que l'id (ex: après création, ou clic notif), charger les détails
         if (this._desireId && !data.title) {
@@ -519,17 +643,21 @@ export class DesireDetailsPage extends HTMLElement {
                     timeAgo: 'À l\'instant',
                     commune: full.commune || 'Abidjan',
                     date: this._formatDateDetail(full.event_date),
-                    spots: formatSpotsLabel(full.spots_taken, full.max_spots),
+                    spots: formatSpotsLabel(full.spots_taken, full.max_spots, full.is_unlimited),
                     price: this._formatPriceDetail(full),
                     avatar: resolveImageUrl(full.user?.avatar_url ?? full.author_avatar_url ?? full.author?.avatar_url) || DEFAULT_AVATAR_PATH,
                     images: full.images || [],
                     description: full.description || '',
                     view_count: full.view_count,
+                    desireStatus: full.desire_status,
                 };
             } catch (err) {
                 console.warn('[DesireDetails] Erreur chargement envie par id:', err);
             }
         }
+
+        // NAV-06 : état annulé détecté depuis le cycle de vie de l'envie.
+        this._isCancelled = data.desireStatus === 'cancelled';
 
         // Hydrate data
         this.querySelector('#dTitle').textContent = data.title || '';
@@ -537,6 +665,26 @@ export class DesireDetailsPage extends HTMLElement {
         this.querySelector('#dTime').textContent = data.timeAgo || 'À l\'instant';
         this.querySelector('#dCommune').textContent = data.commune || '';
         this.querySelector('#dDate').textContent = data.date || '';
+        const addressWrap = this.querySelector('#dAddressWrap');
+        const addressEl = this.querySelector('#dAddress');
+        if (addressWrap && addressEl) {
+            const address = (data.address || '').trim();
+            const commune = (data.commune || '').trim();
+            // PAR-16 : le lieu exact peut se limiter à la commune ; l'itinéraire
+            // reste proposé dès qu'une localisation est connue.
+            const location = address || commune;
+            addressEl.textContent = location;
+            if (location) {
+                const itinerary = this.querySelector('#dItinerary');
+                if (itinerary) {
+                    const query = encodeURIComponent([address, commune].filter(Boolean).join(', '));
+                    itinerary.href = `https://www.google.com/maps/dir/?api=1&destination=${query}`;
+                }
+                addressWrap.style.display = 'flex';
+            } else {
+                addressWrap.style.display = 'none';
+            }
+        }
         this.querySelector('#dSpots').textContent = data.spots || '';
         this.querySelector('#dPrice').textContent = data.price || 'Gratuit';
         this.querySelector('#dAvatar').src = data.avatar || DEFAULT_AVATAR_PATH;
@@ -596,6 +744,57 @@ export class DesireDetailsPage extends HTMLElement {
 
         // ── Vérification asynchrone de l'état (créateur ? déjà rejoint ?) ──
         await this._checkUserStatus(data);
+
+        // NAV-05 : mettre en évidence les champs concernés par la modification.
+        // PAR-16 : idem pour le lieu exact et la date lors d'un rappel.
+        if (notificationType === 'desire_updated'
+            || notificationType === 'reminder_day'
+            || notificationType === 'reminder_soon') {
+            this._highlightChangedFields();
+        }
+
+        if (focus) {
+            requestAnimationFrame(() => this._focusTarget(focus));
+        }
+    }
+
+    /**
+     * Fait défiler la vue vers l'action attendue par la notification (NIN-06).
+     * Les sections conditionnelles (participants, footer) sont ignorées si
+     * l'état courant ne les affiche pas.
+     */
+    _focusTarget(focus) {
+        const selectors = {
+            'participant-requests': '#participantsSection',
+            'confirm-presence': '#joinActionBtn',
+            'practical-info': '#dMeta',
+        };
+        const selector = selectors[focus];
+        if (!selector) return;
+
+        const element = this.querySelector(selector);
+        if (!element || element.offsetParent === null) return;
+
+        element.setAttribute('tabindex', '-1');
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.focus({ preventScroll: true });
+    }
+
+    /**
+     * Met en évidence les informations pratiques (heure, lieu exact) : champs
+     * modifiés par une modification importante (NAV-05) ou à retrouver lors
+     * d'un rappel (PAR-16). Le highlight est transitoire.
+     */
+    _highlightChangedFields() {
+        const targets = [
+            this.querySelector('#dDate'),
+            this.querySelector('#dCommune'),
+            this.querySelector('#dAddressWrap'),
+        ];
+        targets.forEach(el => el?.classList.add('field-changed'));
+        setTimeout(() => {
+            targets.forEach(el => el?.classList.remove('field-changed'));
+        }, 4000);
     }
 
     /**
@@ -624,6 +823,12 @@ export class DesireDetailsPage extends HTMLElement {
             if (data.isJoined === true) {
                 this._hasJoined = true;
                 participantsSection?.classList.remove('visible');
+                // Le statut exact (accepté / présence confirmée / échéance dépassée) reste à préciser (PAR-08/10).
+                try {
+                    const joined = await api.getJoinedDesires();
+                    const match = Array.isArray(joined) && joined.find(d => String(d.id) === String(this._desireId));
+                    this._applyJoinStatus(match);
+                } catch { /* l'état « rejoint » reste affiché */ }
                 if (joinBtn) { joinBtn.disabled = false; this._updateJoinButton(joinBtn); }
                 return;
             }
@@ -636,26 +841,18 @@ export class DesireDetailsPage extends HTMLElement {
             if (this._isCreator) {
                 // —— Mode créateur : afficher les intéressés ——
                 participantsSection?.classList.add('visible');
-                this._loadParticipants(api);
+                await this._loadParticipants(api);
             } else if (data.spots === 'Complet') {
                 // —— Envie complète ——
                 participantsSection?.classList.remove('visible');
                 this._isFull = true;
             } else {
-                // —— Mode participant : vérifier statut (pending/accepted/rejected) ——
+                // —— Mode participant : vérifier le statut de participation ——
                 participantsSection?.classList.remove('visible');
                 const joined = await api.getJoinedDesires();
                 const match = Array.isArray(joined) && joined.find(d => String(d.id) === String(this._desireId));
                 this._hasJoined = !!match;
-                // Si le statut est 'rejected', masquer le CTA
-                if (match && match.status === 'rejected') {
-                    this._hasJoined = false;
-                    this._isRejected = true;
-                }
-                // Si accepté, bloquer le bouton Quitter
-                if (match && match.status === 'accepted') {
-                    this._isAccepted = true;
-                }
+                this._applyJoinStatus(match);
             }
         } catch (err) {
             console.warn('[DesireDetails] Erreur lors du check statut :', err.message);
@@ -664,6 +861,26 @@ export class DesireDetailsPage extends HTMLElement {
                 joinBtn.disabled = false;
                 this._updateJoinButton(joinBtn);
             }
+        }
+    }
+
+    /**
+     * Applique le statut de participation issu de GET /me/joined (PAR-08 / PAR-10).
+     * 'rejected' → plus de CTA ; 'confirmed' → présence confirmée ;
+     * 'accepted' → confirmation demandée ; 'expired' → place libérée.
+     * @param {object|null|undefined} match
+     */
+    _applyJoinStatus(match) {
+        if (!match) return;
+        if (match.status === 'rejected') {
+            this._hasJoined = false;
+            this._isRejected = true;
+        } else if (match.status === 'confirmed') {
+            this._isConfirmed = true;
+        } else if (match.status === 'accepted') {
+            this._isAccepted = true;
+        } else if (match.status === 'expired') {
+            this._hasJoined = false;
         }
     }
 

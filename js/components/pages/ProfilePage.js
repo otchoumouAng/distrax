@@ -83,6 +83,11 @@ export class ProfilePage extends HTMLElement {
 
                     <!-- Section déconnexion -->
                     <div class="profile-actions-section">
+                        <button class="profile-action-item" id="installAppBtn" style="display: none;">
+                            <i class="material-icons-round">install_mobile</i>
+                            <span>Installer Dystrax</span>
+                            <i class="material-icons-round profile-action-arrow">chevron_right</i>
+                        </button>
                         <button class="profile-action-item">
                             <i class="material-icons-round">notifications_none</i>
                             <span>Notifications</span>
@@ -231,20 +236,42 @@ export class ProfilePage extends HTMLElement {
                 const { stop: stopSession } = await import('../../utils/sessionManager.js');
                 stopSession();
 
-                // Supprimer le token FCM
-                import('../../utils/firebaseConfig.js').then(({ deleteCurrentToken }) => {
-                    deleteCurrentToken().catch(() => {});
-                });
+                // Retirer l'appareil tant que le jeton d'authentification est
+                // encore disponible pour l'appel backend.
+                const { deleteCurrentToken } = await import('../../utils/firebaseConfig.js');
+                await deleteCurrentToken();
 
                 api.logout();
                 this.dispatchEvent(new CustomEvent('navigate-login', { bubbles: true, composed: true }));
             });
         }
 
+        // Installer Dystrax — entrée permanente masquée si déjà installée (PWA-02/05)
+        const installBtn = this.querySelector('#installAppBtn');
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                const { startInstallFlow } = await import('../../utils/installPWA.js');
+                await startInstallFlow('Installez Dystrax pour être prévenu de vos envies, même application fermée.');
+            });
+        }
+        this.refreshInstallEntry();
+
         // Recharger le profil si une envie est refusée (retire la carte de la liste rejointes)
         window.addEventListener('desire-rejected', () => {
             this.loadProfile();
         });
+    }
+
+    // Affiche l'entrée d'installation uniquement si elle est pertinente (PWA-05)
+    async refreshInstallEntry() {
+        const installBtn = this.querySelector('#installAppBtn');
+        if (!installBtn) return;
+        try {
+            const { isStandalone, isInstallSupported } = await import('../../utils/installPWA.js');
+            installBtn.style.display = (!isStandalone() && isInstallSupported()) ? 'flex' : 'none';
+        } catch {
+            installBtn.style.display = 'none';
+        }
     }
 
     // Charge et affiche les données réelles du profil depuis l'API
@@ -325,10 +352,12 @@ export class ProfilePage extends HTMLElement {
                                 title="${escapeHtml(desire.title)}"
                                 date="${escapeHtml(dateStr)}" 
                                 price="${escapeHtml(priceStr)}" 
-                                spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots))}"
+                                spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots, desire.is_unlimited))}"
                                 images="${escapeHtml(imagesStr)}"
                                 description="${escapeHtml(desire.description || '')}"
                                 icon="${escapeHtml(desire.category_icon || desire.category || 'label')}"
+                                desire-status="${escapeHtml(desire.desire_status || '')}"
+                                ${desire.needs_maintenance ? 'needs-maintenance' : ''}
                                 ${isBoostEnabled ? 'show-boost' : ''}
                                 ${hasActiveBoost ? 'has-active-boost' : ''}
                                 ${hasActiveBoost ? 'is-boosted' : ''}
@@ -370,7 +399,8 @@ export class ProfilePage extends HTMLElement {
                         const authorPseudo = desire.author?.pseudo || desire.author_pseudo || 'Organisateur';
                         const authorAvatarSafe = resolveImageUrl(desire.author?.avatar_url || desire.author_avatar) || DEFAULT_AVATAR_PATH;
 
-                        const currentMode = (desire.status === 'accepted') ? 'joined' : 'pending';
+                        // 'confirmed' = présence confirmée, participation active (PAR-08)
+                        const currentMode = (desire.status === 'accepted' || desire.status === 'confirmed') ? 'joined' : 'pending';
 
                         joinedList.innerHTML += `
                             <desire-card 
@@ -383,10 +413,11 @@ export class ProfilePage extends HTMLElement {
                                 title="${escapeHtml(desire.title)}"
                                 date="${escapeHtml(dateStr)}" 
                                 price="${escapeHtml(priceStr)}" 
-                                spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots))}"
+                                spots="${escapeHtml(formatSpotsLabel(desire.spots_taken, desire.max_spots, desire.is_unlimited))}"
                                 images="${escapeHtml(imagesStr)}"
                                 description="${escapeHtml(desire.description || '')}"
                                 icon="${escapeHtml(desire.category_icon || desire.category || 'label')}"
+                                desire-status="${escapeHtml(desire.desire_status || '')}"
                             ></desire-card>
                         `;
                     });
@@ -416,6 +447,7 @@ export class ProfilePage extends HTMLElement {
 
     show() {
         this.querySelector('#profilePage').style.display = 'block';
+        this.refreshInstallEntry();
         this.loadProfile();
     }
 

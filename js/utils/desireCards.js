@@ -50,7 +50,7 @@ export function timeAgo(isoDate) {
 }
 
 export function buildDesireViewDetail(desire) {
-    const spotsLabel = formatSpotsLabel(desire?.spots_taken, desire?.max_spots);
+    const spotsLabel = formatSpotsLabel(desire?.spots_taken, desire?.max_spots, desire?.is_unlimited);
     const isFull = spotsLabel === 'Complet';
     return {
         id: desire?.id,
@@ -100,6 +100,7 @@ export function createDesireCard(desire, options = {}) {
     card.setAttribute('date', viewDetail.date);
     card.setAttribute('price', viewDetail.price);
     card.setAttribute('commune', desire?.commune || 'Abidjan');
+    card.setAttribute('address', desire?.address || '');
     card.setAttribute('spots', viewDetail.spots);
     card.setAttribute('navigate-on-card', '');
     card.setAttribute('btn-text', 'Rejoindre');
@@ -124,6 +125,11 @@ export function createDesireCard(desire, options = {}) {
         card.setAttribute('is-boosted', '');
     }
 
+    // Badge de cycle de vie (CAT-04)
+    if (desire?.desire_status) {
+        card.setAttribute('desire-status', desire.desire_status);
+    }
+
     // Mode « complet » : désactive le join
     if (viewDetail.isFull) {
         card.setAttribute('mode', 'full');
@@ -131,7 +137,15 @@ export function createDesireCard(desire, options = {}) {
         card.setAttribute('mode', 'owner');
     } else if (joinedDesireIds instanceof Map && joinedDesireIds.has(String(desire?.id || ''))) {
         const status = joinedDesireIds.get(String(desire?.id || ''));
-        card.setAttribute('mode', status === 'accepted' ? 'joined' : 'pending');
+        if (status === 'accepted' || status === 'confirmed') {
+            // Participation active (PAR-08)
+            card.setAttribute('mode', 'joined');
+        } else if (status === 'expired') {
+            // Échéance de confirmation dépassée : place libérée, carte re-demandable (PAR-10)
+            card.removeAttribute('mode');
+        } else {
+            card.setAttribute('mode', 'pending');
+        }
     } else if (joinedDesireIds instanceof Set && joinedDesireIds.has(String(desire?.id || ''))) {
         card.setAttribute('mode', 'pending');
     }

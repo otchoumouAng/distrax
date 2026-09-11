@@ -1,9 +1,29 @@
 import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
 import { resolveImageUrl, getImageVariantUrl } from '../../utils/imageUrl.js';
 
+// Badges de statut du cycle de vie d'une envie (CAT-04).
+// 'published' n'affiche aucun badge (cas nominal du catalogue).
+const DESIRE_STATUS_BADGES = {
+    draft: { label: 'Brouillon', icon: 'edit_note', tone: 'neutral' },
+    cancelled: { label: 'Annulée', icon: 'cancel', tone: 'danger' },
+    realized: { label: 'Réalisée', icon: 'check_circle', tone: 'success' },
+    not_realized: { label: 'Non réalisée', icon: 'event_busy', tone: 'neutral' },
+    expired: { label: 'Expirée', icon: 'history_toggle_off', tone: 'neutral' },
+    archived: { label: 'Archivée', icon: 'archive', tone: 'neutral' },
+};
+
+/**
+ * Retourne les informations d'affichage du badge de statut d'une envie,
+ * ou null si aucun badge ne doit être affiché (statut publié/inconnu).
+ * @param {string|undefined|null} status
+ */
+export function getDesireStatusBadge(status) {
+    return DESIRE_STATUS_BADGES[String(status || '').toLowerCase()] || null;
+}
+
 export class DesireCard extends HTMLElement {
     static get observedAttributes() {
-        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card'];
+        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card', 'desire-status', 'needs-maintenance'];
     }
 
     connectedCallback() {
@@ -69,6 +89,26 @@ export class DesireCard extends HTMLElement {
         const isBoosted = this.hasAttribute('is-boosted');
 
         const sponsoredBadgeHtml = isBoosted ? `<span class="sponsored-badge"><i class="material-icons-round">campaign</i> Sponsorisé</span>` : '';
+
+        // Badge de cycle de vie (CAT-04) : Annulée / Réalisée / Expirée / etc.
+        const statusInfo = getDesireStatusBadge(this.getAttribute('desire-status'));
+        const statusBadgeHtml = statusInfo
+            ? `<span class="desire-status-badge status-${statusInfo.tone}"><i class="material-icons-round">${statusInfo.icon}</i> ${statusInfo.label}</span>`
+            : '';
+
+        // Demande de maintien (ORG-08/09) : proposé à l'organisateur dont
+        // l'activité approche dans les envies créées de son profil.
+        const needsMaintenance = mode === 'profile' && this.hasAttribute('needs-maintenance');
+        const maintenanceHtml = needsMaintenance ? `
+            <div class="maintenance-strip">
+                <div class="maintenance-head"><i class="material-icons-round">event_available</i><span>Ton activité approche</span></div>
+                <p>Confirme qu'elle est maintenue afin de prévenir les participants.</p>
+                <div class="maintenance-actions">
+                    <button class="maint-keep-btn" type="button"><i class="material-icons-round">check</i> Maintenir</button>
+                    <button class="maint-edit-btn" type="button"><i class="material-icons-round">edit</i> Modifier</button>
+                    <button class="maint-cancel-btn" type="button"><i class="material-icons-round">event_busy</i> Annuler</button>
+                </div>
+            </div>` : '';
 
         let cardActionsHtml = '';
         if (mode === 'profile') {
@@ -137,6 +177,7 @@ export class DesireCard extends HTMLElement {
             <article class="desire-card card-${themeSafe}${cardClickableClass}">
                 ${imageHtml}
                 ${sponsoredBadgeHtml}
+                ${statusBadgeHtml}
                 <div class="card-header">
                     <div class="user-info">
                         <img src="${avatar || DEFAULT_AVATAR_PATH}" alt="${author}" class="user-avatar" data-fallback-avatar="${avatarFallback}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
@@ -155,6 +196,7 @@ export class DesireCard extends HTMLElement {
                         ${viewCountHtml}
                     </div>
                 </div>
+                ${maintenanceHtml}
                 <div class="card-footer">
                     <div class="participants">
                         ${avatarsStackHtml}
@@ -295,6 +337,65 @@ export class DesireCard extends HTMLElement {
             });
         }
 
+        // ── Demande de maintien (ORG-08/09) ──────────────────────
+        const keepBtn = this.querySelector('.maint-keep-btn');
+        if (keepBtn) {
+            keepBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = this.getAttribute('desire-id');
+                keepBtn.disabled = true;
+                try {
+                    const { api } = await import('../../api.js');
+                    await api.keepDesire(id);
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Activité maintenue. Les participants sont prévenus.', type: 'success' } }));
+                    window.dispatchEvent(new CustomEvent('profile-refresh'));
+                } catch (err) {
+                    keepBtn.disabled = false;
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: err.message || 'Erreur', type: 'error' } }));
+                }
+            });
+        }
+
+        const maintEditBtn = this.querySelector('.maint-edit-btn');
+        if (maintEditBtn) {
+            maintEditBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.dispatchEvent(new CustomEvent('navigate-create', {
+                    detail: { editMode: true, desireId: this.getAttribute('desire-id') },
+                    bubbles: true,
+                    composed: true
+                }));
+            });
+        }
+
+        const maintCancelBtn = this.querySelector('.maint-cancel-btn');
+        if (maintCancelBtn) {
+            maintCancelBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const { showConfirm } = await import('../../utils/confirm.js');
+                const ok = await showConfirm({
+                    title: 'Annuler cette envie ?',
+                    message: 'Les participants seront prévenus que l\'activité est annulée.',
+                    confirmLabel: 'Oui, annuler',
+                    cancelLabel: 'Retour',
+                    type: 'danger',
+                });
+                if (!ok) return;
+
+                const id = this.getAttribute('desire-id');
+                maintCancelBtn.disabled = true;
+                try {
+                    const { api } = await import('../../api.js');
+                    await api.updateDesire(id, { status: 'cancelled' });
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Activité annulée. Les participants sont prévenus.', type: 'info' } }));
+                    window.dispatchEvent(new CustomEvent('profile-refresh'));
+                } catch (err) {
+                    maintCancelBtn.disabled = false;
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: err.message || 'Erreur', type: 'error' } }));
+                }
+            });
+        }
+
         // Masquer le bouton boost si la feature est désactivée (check non-bloquant)
         this._applyBoostVisibility();
     }
@@ -311,6 +412,7 @@ export class DesireCard extends HTMLElement {
                 theme:       this.getAttribute('theme')    || 'explore',
                 timeAgo:     this.getAttribute('time-ago') || '',
                 commune:     this.getAttribute('commune')  || '',
+                address:     this.getAttribute('address')  || '',
                 date:        this.getAttribute('date')     || '',
                 spots:       this.getAttribute('spots')    || '',
                 price:       this.getAttribute('price')    || '',

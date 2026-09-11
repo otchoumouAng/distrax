@@ -216,9 +216,8 @@ export class RegisterPage extends HTMLElement {
                         this.hide();
                         this._resetAll();
 
-                        import('../../utils/firebaseConfig.js').then(({ requestNotificationPermissionAndRegister }) => {
-                            requestNotificationPermissionAndRegister().catch(() => {});
-                        });
+                        // La demande d'autorisation push est désormais contextuelle
+                        // (après avoir rejoint ou publié une envie), jamais après inscription.
 
                         window.dispatchEvent(new CustomEvent('user-logged-in'));
                         const event = new CustomEvent('navigate-home', { bubbles: true, composed: true });

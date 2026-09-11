@@ -9,7 +9,9 @@ import { GlobalStore } from './store/GlobalStore.js';
 import { api } from './api.js';
 import { escapeHtml } from './utils/escapeHtml.js';
 import * as sessionManager from './utils/sessionManager.js';
-import { initFirebase } from './utils/firebaseConfig.js';
+import { initFirebase, registerDeviceForExistingPermission } from './utils/firebaseConfig.js';
+import { getNotificationFocus, resolvePushTarget } from './utils/pushNavigation.js';
+import { captureInstallPrompt, offerInstallBanner } from './utils/installPWA.js';
 
 // Pages accessibles sans être connecté
 const PUBLIC_PAGES = new Set(['home', 'search', 'results', 'login', 'register', 'forgot-password', 'reset-password']);
@@ -53,12 +55,27 @@ GlobalStore.subscribe('theme', (theme: string) => {
 GlobalStore.setState('theme', 'light');
 
 /* ---------------------------------------------------------------
+   4bis. INSTALLATION PWA (PWA-02)
+   Capture précoce de l'invite native, avant que le navigateur ne la consomme.
+   --------------------------------------------------------------- */
+captureInstallPrompt();
+
+const INSTALL_BANNER_DELAY_MS = 2500;
+function offerContextualInstall() {
+    setTimeout(() => {
+        offerInstallBanner(
+            'Installez Dystrax pour recevoir vos notifications même quand l’application est fermée.',
+        );
+    }, INSTALL_BANNER_DELAY_MS);
+}
+
+/* ---------------------------------------------------------------
    5. NAVIGATION SPA
    --------------------------------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
     
     // Initialiser Firebase (si configuré)
-    initFirebase();
+    initFirebase().then(() => registerDeviceForExistingPermission()).catch(() => {});
 
     const get = <T extends HTMLElement>(selector: string) =>
         document.querySelector(selector) as T | null;
@@ -113,25 +130,48 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(toastEl);
 
     let _toastTimer: ReturnType<typeof setTimeout> | null = null;
-    function showToast(message: string, type: 'success' | 'info' | 'error' = 'success') {
+    function showToast(
+        message: string,
+        type: 'success' | 'info' | 'error' = 'success',
+        action?: { label: string; run: () => void },
+    ) {
         if (_toastTimer) clearTimeout(_toastTimer);
         const icons: Record<string, string>  = { success: 'check_circle', info: 'info', error: 'error_outline' };
         const bgColors: Record<string, string> = { success: '#10b981', info: '#6366f1', error: '#ef4444' };
         toastEl.style.background = bgColors[type] || bgColors.success;
         toastEl.style.color = '#fff';
-        toastEl.innerHTML = `<i class="material-icons-round" style="font-size: 18px;">${icons[type]}</i> ${escapeHtml(message)}`;
+        toastEl.innerHTML = [
+            `<i class="material-icons-round" style="font-size: 18px;">${icons[type]}</i>`,
+            `<span>${escapeHtml(message)}</span>`,
+            action ? `<span style="font-weight:700;text-decoration:underline;margin-left:4px;">${escapeHtml(action.label)}</span>` : '',
+        ].join(' ');
+        toastEl.style.pointerEvents = action ? 'auto' : 'none';
+        toastEl.style.cursor = action ? 'pointer' : 'default';
+        toastEl.onclick = action ? () => {
+            action.run();
+            toastEl.style.opacity = '0';
+            toastEl.style.transform = 'translateX(-50%) translateY(-20px)';
+        } : null;
         toastEl.style.opacity = '1';
         toastEl.style.transform = 'translateX(-50%) translateY(0)';
         _toastTimer = setTimeout(() => {
             toastEl.style.opacity = '0';
             toastEl.style.transform = 'translateX(-50%) translateY(-20px)';
+            toastEl.style.pointerEvents = 'none';
+            toastEl.onclick = null;
         }, 3000);
     }
 
     // Écouter l'événement show-toast émis par les composants
     window.addEventListener('show-toast', (e) => {
-        const { message, type } = (e as CustomEvent).detail || {};
-        if (message) showToast(message, type || 'success');
+        const { message, type, actionLabel, actionEvent, actionDetail } = (e as CustomEvent).detail || {};
+        const action = actionLabel && actionEvent
+            ? {
+                label: actionLabel,
+                run: () => window.dispatchEvent(new CustomEvent(actionEvent, { detail: actionDetail })),
+            }
+            : undefined;
+        if (message) showToast(message, type || 'success', action);
     });
 
     function show(el: HTMLElement | null) { if (el) el.style.display = 'block'; }
@@ -139,6 +179,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let _currentPageId = 'home';
     let _pendingBoostData: { desireId?: string; desireTitle?: string } | null = null;
+
+    // Destination de notification à restaurer après une ré-authentification
+    // (clic push ou lien #desire/<id>?notification=<type>). Conservée en
+    // sessionStorage pour survivre à un rechargement pendant le login.
+    const PENDING_DESTINATION_KEY = 'dystrax-pending-destination';
+
+    function rememberPendingDestination(id: string, notificationType?: string) {
+        if (!id) return;
+        try {
+            sessionStorage.setItem(PENDING_DESTINATION_KEY, JSON.stringify({
+                id,
+                notificationType: notificationType || '',
+            }));
+        } catch { /* stockage indisponible */ }
+    }
+
+    function readPendingDestination(): { id: string; notificationType: string } | null {
+        try {
+            const raw = sessionStorage.getItem(PENDING_DESTINATION_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return parsed?.id
+                ? { id: String(parsed.id), notificationType: parsed.notificationType || '' }
+                : null;
+        } catch { return null; }
+    }
+
+    function clearPendingDestination() {
+        try { sessionStorage.removeItem(PENDING_DESTINATION_KEY); } catch { /* ignore */ }
+    }
 
     function _doNavigate(pageId: string) {
         // Tout masquer
@@ -296,6 +366,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialisation — attendre que les WC soient enregistrés
     const hashRaw = window.location.hash.replace('#', '') || 'home';
     const initialHash = hashRaw.split('?')[0] || hashRaw;
+    const initialHashQuery = hashRaw.includes('?') ? hashRaw.slice(hashRaw.indexOf('?') + 1) : '';
+    const initialNotificationType = new URLSearchParams(initialHashQuery).get('notification') || '';
+    const initialNotificationId = new URLSearchParams(initialHashQuery).get('notification_id') || '';
     history.replaceState({ page: initialHash }, '', window.location.hash || '#home');
     _currentPageId = initialHash || 'home';
 
@@ -316,13 +389,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (api.isAuthenticated()) {
             sessionManager.start(); // déjà connecté → démarrer le timer
+            offerContextualInstall();
         }
 
         // Ouvrir l'overlay de détails si c'est un lien partagé (et pousser un état pour que "retour" ferme l'overlay)
         if (_desireIdFromLink) {
+            // Mémoriser la cible : si une reconnexion est nécessaire, on y revient après login.
+            rememberPendingDestination(_desireIdFromLink, initialNotificationType);
+            // Journaliser l'ouverture d'une notification push au lancement à froid.
+            if (initialNotificationId && api.isAuthenticated()) {
+                api.trackNotificationOpen(initialNotificationId).catch(() => {});
+            }
             setTimeout(() => {
                 history.pushState({ page: 'home', overlay: true }, '', '#home');
-                desireDetailsPage?.open?.({ id: _desireIdFromLink });
+                desireDetailsPage?.open?.({
+                    id: _desireIdFromLink,
+                    notificationType: initialNotificationType,
+                    focus: getNotificationFocus(initialNotificationType),
+                });
             }, 150);
         }
 
@@ -349,6 +433,56 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             navigateTo('login');
         }
+    }
+
+    async function openPushDestination(payload: unknown) {
+        const target = resolvePushTarget(payload, window.location.origin);
+        window.dispatchEvent(new CustomEvent('refresh-notif-badge'));
+
+        // Journaliser l'ouverture de la notification push (PUS-11), sans bloquer
+        // la navigation si l'appel échoue.
+        if (target.notificationId && api.isAuthenticated()) {
+            api.trackNotificationOpen(target.notificationId).catch(() => {});
+        }
+
+        if (target.desireId) {
+            // Mémoriser la destination pour la restaurer si une ré-authentification est requise.
+            rememberPendingDestination(target.desireId, target.type);
+            const targetHash = `#desire/${target.desireId}`;
+            if (window.location.hash !== targetHash) {
+                history.pushState(
+                    { page: _currentPageId, overlay: true, fromPush: true },
+                    '',
+                    targetHash,
+                );
+            }
+
+            await desireDetailsPage?.open?.({
+                id: target.desireId,
+                notificationType: target.type,
+                focus: getNotificationFocus(target.type),
+            });
+            return;
+        }
+
+        if (target.url !== window.location.href) {
+            window.location.assign(target.url);
+        }
+    }
+
+    window.addEventListener('open-push-destination', (event) => {
+        openPushDestination((event as CustomEvent).detail).catch((error) => {
+            console.warn('Impossible d’ouvrir la notification push :', error);
+        });
+    });
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data?.type !== 'FCM_CLICK') return;
+            openPushDestination(event.data).catch((error) => {
+                console.warn('Impossible d’ouvrir la notification push :', error);
+            });
+        });
     }
 
     // Événements de navigation émis par les composants
@@ -383,17 +517,40 @@ document.addEventListener('DOMContentLoaded', () => {
     // Après connexion / inscription : démarrer la session + recharger l'exploration
     window.addEventListener('user-logged-in', () => {
         sessionManager.start(); // démarre le timer d'inactivité
+        registerDeviceForExistingPermission().catch(() => {});
+        offerContextualInstall();
         const expl = document.querySelector('app-exploration-section') as any;
         if (expl) {
             expl._loading = false;
             expl.loadDesires?.();
         }
         window.dispatchEvent(new CustomEvent('refresh-notif-badge'));
+
+        // Restaurer la destination d'une notification mémorisée avant la reconnexion
+        const pending = readPendingDestination();
+        if (pending) {
+            clearPendingDestination();
+            setTimeout(() => {
+                history.pushState({ page: 'home', overlay: true }, '', `#desire/${pending.id}`);
+                desireDetailsPage?.open?.({
+                    id: pending.id,
+                    notificationType: pending.notificationType,
+                    focus: getNotificationFocus(pending.notificationType),
+                });
+            }, 150);
+        }
     });
 
     // Déconnexion après inactivité : naviguer vers login avec pré-remplissage
     window.addEventListener('session-expired', (e) => {
         const { phone } = (e as CustomEvent).detail || {};
+        // Conserver la cible courante (#desire/<id>) pour la restaurer après reconnexion.
+        // On ne l'écrase pas si une destination plus riche (avec type de notification) existe déjà.
+        const currentMatch = window.location.hash.match(/^#desire\/([0-9a-f-]{36})(?:[?&](.*))?$/i);
+        if (currentMatch && !readPendingDestination()) {
+            const notifType = new URLSearchParams(currentMatch[2] || '').get('notification') || '';
+            rememberPendingDestination(currentMatch[1], notifType);
+        }
         navigateTo('login');
         setTimeout(() => {
             if (loginPage?.show) loginPage.show({ prefillPhone: phone });
@@ -458,7 +615,8 @@ document.addEventListener('DOMContentLoaded', () => {
             (resultsContent as any).setQueryAndFilters(detail.query || '', {
                 commune: detail.commune,
                 price_type: detail.price_type,
-                category: detail.category
+                category: detail.category,
+                date: detail.date
             });
         }
         setTimeout(() => explorationSection?.scrollIntoView({ behavior: 'smooth' }), 100);

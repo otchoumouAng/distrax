@@ -216,7 +216,7 @@ export const api = {
 
     /**
      * GET /desires — Liste filtrée des envies
-     * @param {Object} filters - { query, category, commune, price_type, page, size }
+     * @param {Object} filters - { query, category, commune, price_type, date, page, size }
      */
     async fetchDesires(filters = {}) {
         const params = new URLSearchParams();
@@ -225,6 +225,7 @@ export const api = {
         if (filters.exclude_category) params.set('exclude_category', filters.exclude_category);
         if (filters.commune) params.set('commune', filters.commune);
         if (filters.price_type) params.set('price_type', filters.price_type);
+        if (filters.date) params.set('date', filters.date);
         params.set('page', filters.page || 1);
         params.set('size', filters.size || 20);
 
@@ -330,6 +331,28 @@ export const api = {
      */
     async rejectParticipant(desireId, userId) {
         const res = await fetch(`${BASE_URL}/desires/${desireId}/participants/${userId}/reject`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /desires/:id/confirm — Confirmer sa présence après acceptation [auth]
+     */
+    async confirmPresence(id) {
+        const res = await fetch(`${BASE_URL}/desires/${id}/confirm`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /desires/:id/keep — Confirmer le maintien de l'activité [auth + owner] (ORG-08)
+     */
+    async keepDesire(id) {
+        const res = await fetch(`${BASE_URL}/desires/${id}/keep`, {
             method: 'POST',
             headers: buildHeaders(),
         });
@@ -556,6 +579,17 @@ export const api = {
             headers: buildHeaders(),
         });
         return handleResponse(res);
+    },
+
+    /**
+     * POST /notifications/:id/open — Journalise l'ouverture d'une notif push [auth]
+     * Appel fire-and-forget recommandé pour ne pas bloquer la navigation.
+     */
+    async trackNotificationOpen(notifId) {
+        await fetch(`${BASE_URL}/notifications/${notifId}/open`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
     },
 
     /**

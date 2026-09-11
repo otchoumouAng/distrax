@@ -1,6 +1,7 @@
 import { DEFAULT_AVATAR_PATH } from '../../utils/escapeHtml.js';
 import { formatSpotsLabel } from '../../utils/formatSpots.js';
 import { createDesireCard } from '../../utils/desireCards.js';
+import { buildExplorationFilters } from '../../utils/desireFilters.js';
 
 /**
  * ExplorationSection — Affiche les dernières envies depuis l'API.
@@ -213,7 +214,7 @@ export class ExplorationSection extends HTMLElement {
         if (!append) {
             this._currentPage = 1;
             this._hasMore = true;
-            const hasFilters = this._activeFilters.query || this._activeFilters.commune || this._activeFilters.price_type || this._activeCategory;
+            const hasFilters = this._activeFilters.query || this._activeFilters.commune || this._activeFilters.price_type || this._activeFilters.date || this._activeCategory;
             const titleEl = this.querySelector('#explorationTitle');
             if (titleEl) titleEl.textContent = hasFilters ? 'Résultats' : 'Dernières envies autour de vous';
         }
@@ -233,23 +234,15 @@ export class ExplorationSection extends HTMLElement {
             }
 
             // Charger les envies (catégorie + filtres modale)
-            const filters = { ...this._activeFilters };
-            if (this._activeCategory) filters.category = this._activeCategory;
-
-            if (filters.category !== 'rencontres') {
-                filters.exclude_category = 'rencontres';
-            }
-
-            filters.page = this._currentPage;
-            filters.size = this._pageSize;
+            const filters = buildExplorationFilters(
+                this._activeFilters,
+                this._activeCategory,
+                this._currentPage,
+                this._pageSize,
+            );
 
             const data = await api.fetchDesires(filters);
-            let { items: desires, hasMore } = this._extractPagedItems(data);
-
-            // Filtre de sécurité Front-End (au cas où le backend ne gère pas encore exclude_category)
-            if (filters.category !== 'rencontres') {
-                desires = desires.filter(d => d.category !== 'rencontres');
-            }
+            const { items: desires, hasMore } = this._extractPagedItems(data);
             this._hasMore = hasMore;
 
             if (append) {
@@ -384,7 +377,8 @@ export class ExplorationSection extends HTMLElement {
             this._activeFilters = {
                 query: d.query || undefined,
                 commune: d.commune || undefined,
-                price_type: d.price_type || undefined
+                price_type: d.price_type || undefined,
+                date: d.date || undefined
             };
             if (d.category !== undefined && d.category !== null && String(d.category).trim() !== '') {
                 this._activeCategory = String(d.category).trim();

@@ -392,6 +392,115 @@ body.state-results .scroll-down-indicator {
     color: var(--text-light);
 }
 
+/* Badge de statut du cycle de vie d'une envie (CAT-04) */
+.desire-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    align-self: flex-start;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.desire-status-badge .material-icons-round {
+    font-size: 13px;
+}
+
+.desire-status-badge.status-danger {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.desire-status-badge.status-success {
+    color: var(--success, #10b981);
+    background: var(--success-bg, rgba(16, 185, 129, 0.12));
+}
+
+/* Bandeau de maintien d'activité (ORG-08/09) */
+.maintenance-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 16px;
+    background: rgba(245, 158, 11, 0.10);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.maintenance-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #d97706;
+}
+
+.maintenance-head .material-icons-round {
+    font-size: 16px;
+}
+
+.maintenance-strip p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.maintenance-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.maintenance-actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 100px;
+    border: 1px solid transparent;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.maintenance-actions .material-icons-round {
+    font-size: 15px;
+}
+
+.maintenance-actions button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.maint-keep-btn {
+    background: #f59e0b;
+    color: #fff;
+}
+
+.maint-edit-btn {
+    background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+    color: var(--text-color, inherit);
+}
+
+.maint-cancel-btn {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+}
+
+[data-theme="dark"] .maintenance-strip {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
 /* Image plein-bleed avec fondu bas */
 .card-image {
     margin: -20px -20px 4px;
@@ -537,8 +646,9 @@ body.state-results .scroll-down-indicator {
 
 .participants {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
 }
 
 .avatars-stack {

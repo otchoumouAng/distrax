@@ -40,7 +40,8 @@ coverage/
 .vitest-cache/
 
 # ── Fichiers sensibles / secrets ────────────────────────────────
-docs/secret-codes.md
+# Documentation locale (peut contenir des secrets) : jamais versionnée
+docs/
 
 # ── Divers ───────────────────────────────────────────────────────
 *.local
