@@ -164,8 +164,8 @@ if (hasFirebaseConfig) {
         const data = extractPushData(payload);
         const notificationOptions = {
             body: data.body || 'Une activité vient d’être mise à jour.',
-            icon: '/assets/icons/icon-192.png',
-            badge: '/assets/icons/icon-192.png',
+            icon: '/assets/icons/icon-192-v2.png',
+            badge: '/assets/icons/icon-192-v2.png',
             data: {
                 ...data,
                 url: resolveTargetUrl(data),
