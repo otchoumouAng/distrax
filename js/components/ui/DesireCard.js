@@ -23,7 +23,7 @@ export function getDesireStatusBadge(status) {
 
 export class DesireCard extends HTMLElement {
     static get observedAttributes() {
-        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card', 'desire-status', 'needs-maintenance'];
+        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card', 'desire-status', 'is-past', 'needs-maintenance'];
     }
 
     connectedCallback() {
@@ -84,6 +84,7 @@ export class DesireCard extends HTMLElement {
         const mode = this.getAttribute('mode') || 'default';
         const navigateOnCard = this.hasAttribute('navigate-on-card');
         const hideViewBtn = navigateOnCard && (mode === 'default' || mode === 'owner');
+        const isPast = this.hasAttribute('is-past');
 
         const hasActiveBoost = this.hasAttribute('has-active-boost');
         const isBoosted = this.hasAttribute('is-boosted');
@@ -91,7 +92,9 @@ export class DesireCard extends HTMLElement {
         const sponsoredBadgeHtml = isBoosted ? `<span class="sponsored-badge"><i class="material-icons-round">campaign</i> Sponsorisé</span>` : '';
 
         // Badge de cycle de vie (CAT-04) : Annulée / Réalisée / Expirée / etc.
-        const statusInfo = getDesireStatusBadge(this.getAttribute('desire-status'));
+        // À défaut, une envie publiée mais déjà passée est signalée comme telle.
+        const statusInfo = getDesireStatusBadge(this.getAttribute('desire-status'))
+            || (isPast ? { label: 'Passée', icon: 'history', tone: 'past' } : null);
         const statusBadgeHtml = statusInfo
             ? `<span class="desire-status-badge status-${statusInfo.tone}"><i class="material-icons-round">${statusInfo.icon}</i> ${statusInfo.label}</span>`
             : '';
@@ -157,14 +160,22 @@ export class DesireCard extends HTMLElement {
                     <i class="material-icons-round">block</i> Complet
                 </button>
             `;
+        } else if (mode === 'past') {
+            // Activité déjà passée : la carte reste consultable mais
+            // l'inscription est close (CTA désactivé).
+            cardActionsHtml = `
+                <button class="ca-btn ca-btn--past" type="button" disabled>
+                    <i class="material-icons-round">event_busy</i> Activité passée
+                </button>
+            `;
         } else {
-            if (!hideViewBtn) {
-                cardActionsHtml = `
-                    <button class="view-btn ca-btn ca-btn--view">
-                        <i class="material-icons-round">visibility</i> Voir
-                    </button>
-                `;
-            }
+            // CTA principal du catalogue : « Rejoindre » ouvre le détail,
+            // où l'inscription est finalisée.
+            cardActionsHtml = `
+                <button class="join-btn ca-btn ca-btn--join">
+                    <i class="material-icons-round">add_circle</i> ${btnText}
+                </button>
+            `;
             if (this.hasAttribute('show-boost')) {
                 cardActionsHtml += '<button class="boost-inline-btn ca-btn ca-btn--boost"><i class="material-icons-round">rocket_launch</i> Booster</button>';
             }
@@ -407,6 +418,7 @@ export class DesireCard extends HTMLElement {
                 id:          this.getAttribute('desire-id'),
                 authorId:    this.dataset.authorId || null,
                 isJoined:    currentMode === 'joined' || currentMode === 'pending',
+                isPast:      this.hasAttribute('is-past'),
                 title:       this.getAttribute('title')    || '',
                 author:      this.getAttribute('author')   || '',
                 theme:       this.getAttribute('theme')    || 'explore',

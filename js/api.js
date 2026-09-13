@@ -123,7 +123,18 @@ export const api = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: idToken }),
         });
-        const data = await handleResponse(res);
+        // Un 401 ici signifie « token Google refusé », pas « session expirée ».
+        // On n'utilise donc pas handleResponse : il déclencherait 'auth-required'
+        // et redirigerait brutalement l'utilisateur (ex. depuis l'inscription).
+        if (!res.ok) {
+            let detail = `Erreur ${res.status}`;
+            try {
+                const err = await res.json();
+                if (err && typeof err.detail === 'string') detail = err.detail;
+            } catch (_) { /* corps non JSON : on garde le message générique */ }
+            throw new Error(detail);
+        }
+        const data = await res.json();
         if (data.access_token) {
             setToken(data.access_token);
         }

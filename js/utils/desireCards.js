@@ -59,6 +59,7 @@ export function buildDesireViewDetail(desire) {
         author: desire?.author_pseudo || 'Anonyme',
         theme: themeFromCategory(desire?.category),
         timeAgo: timeAgo(desire?.created_at),
+        isPast: !!desire?.is_past,
         commune: desire?.commune || 'Abidjan',
         date: formatDesireDate(desire?.event_date),
         spots: spotsLabel,
@@ -130,8 +131,15 @@ export function createDesireCard(desire, options = {}) {
         card.setAttribute('desire-status', desire.desire_status);
     }
 
-    // Mode « complet » : désactive le join
-    if (viewDetail.isFull) {
+    // Activité passée : conservée dans le catalogue mais non rejoignable.
+    if (desire?.is_past) {
+        card.setAttribute('is-past', '');
+    }
+
+    // Mode « passé » prioritaire : plus d'inscription possible.
+    if (desire?.is_past) {
+        card.setAttribute('mode', 'past');
+    } else if (viewDetail.isFull) {
         card.setAttribute('mode', 'full');
     } else if (myUserId && desire?.author_id && myUserId === desire.author_id) {
         card.setAttribute('mode', 'owner');

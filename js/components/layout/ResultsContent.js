@@ -157,11 +157,16 @@ export class ResultsContent extends HTMLElement {
             const spotsLabel = formatSpotsLabel(d.spots_taken, d.max_spots, d.is_unlimited);
             card.setAttribute('spots', spotsLabel);
             card.setAttribute('btn-text', 'Rejoindre');
+            card.setAttribute('navigate-on-card', '');
             card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
             card.setAttribute('description', d.description || '');
             if (d.view_count != null) card.setAttribute('view-count', String(d.view_count));
-            // Mode owner si c'est sa propre envie
-            if (spotsLabel === 'Complet') {
+            // Activité passée : conservée dans le catalogue mais non rejoignable
+            // (CTA désactivé). Prioritaire sur les autres modes.
+            if (d.is_past) {
+                card.setAttribute('is-past', '');
+                card.setAttribute('mode', 'past');
+            } else if (spotsLabel === 'Complet') {
                 card.setAttribute('mode', 'full');
             } else if (this._myUserId && d.author_id && this._myUserId === d.author_id) {
                 card.setAttribute('mode', 'owner');
@@ -177,7 +182,7 @@ export class ResultsContent extends HTMLElement {
             card.addEventListener('desire-joined', (e) => {
                 e.stopPropagation(); // Empêche le toast intempestif
                 document.dispatchEvent(new CustomEvent('view-desire', {
-                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, address: d.address, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: formatSpotsLabel(d.spots_taken, d.max_spots, d.is_unlimited), price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description },
+                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, address: d.address, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: formatSpotsLabel(d.spots_taken, d.max_spots, d.is_unlimited), price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description, isPast: !!d.is_past },
                     bubbles: true, composed: true,
                 }));
             });
@@ -204,7 +209,8 @@ export class ResultsContent extends HTMLElement {
             cards.querySelectorAll('desire-card').forEach(card => {
                 const cardId = String(card.dataset?.desireId || card.getAttribute('desire-id') || '');
                 if (!cardId) return;
-                if (card.getAttribute('mode') === 'owner') return;
+                const cardMode = card.getAttribute('mode');
+                if (cardMode === 'owner' || cardMode === 'past') return;
                 if (joinedMap.has(cardId)) {
                     const status = joinedMap.get(cardId);
                     card.setAttribute('mode', status === 'accepted' ? 'joined' : 'pending');

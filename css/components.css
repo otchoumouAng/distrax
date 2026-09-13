@@ -722,6 +722,31 @@ body.state-results .scroll-down-indicator {
     box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
 
+/* ── Rejoindre — CTA principal du catalogue ── */
+.ca-btn--join {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+.ca-btn--join:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--primary) 45%, transparent);
+    transform: translateY(-1px);
+}
+
+/* ── Activité passée — CTA inactif ── */
+.ca-btn--past,
+.ca-btn--past:disabled {
+    background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-card));
+    color: var(--text-muted);
+    border-color: var(--border-light);
+    box-shadow: none;
+    cursor: default;
+    opacity: 0.8;
+}
+.ca-btn--past .material-icons-round { font-size: 15px; }
+
 /* ── Voir (icône seule — mode profil) */
 .ca-btn--icon {
     background: transparent;

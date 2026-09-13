@@ -159,18 +159,34 @@ export class LoginPage extends HTMLElement {
         }
 
         const googleContainer = this.querySelector('#googleLoginBtnContainer');
-        const btn = form ? form.querySelector('button[type="submit"]') : null;
 
         const setupGoogle = () => {
             initializeGoogleAuth(
-                (data) => {
+                async () => {
+                    // Le token vient d'être stocké par api.loginWithGoogle().
+                    // On rafraîchit le profil avant de signaler la connexion,
+                    // sinon l'UI peut s'appuyer sur un cache utilisateur
+                    // périmé (ou absent) et paraître « bloquée ».
+                    try {
+                        const { api } = await import('../../api.js');
+                        await api.getMe();
+                    } catch (_) {
+                        // Le token reste valide même si /users/me échoue :
+                        // on ne bloque pas la connexion pour autant.
+                    }
+
                     this.hide();
                     window.dispatchEvent(new CustomEvent('user-logged-in'));
                     const event = new CustomEvent('navigate-home', { bubbles: true, composed: true });
                     this.dispatchEvent(event);
                 },
                 (err) => {
-                    this._showError(btn, 'Échec de la connexion Google.');
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            message: (err && err.message) || 'Échec de la connexion Google.',
+                            type: 'error',
+                        },
+                    }));
                 }
             );
             renderGoogleButton(googleContainer, 'continue_with');

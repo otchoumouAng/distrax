@@ -245,14 +245,24 @@ export class RegisterPage extends HTMLElement {
 
         const setupGoogle = () => {
             initializeGoogleAuth(
-                (data) => {
+                async () => {
+                    // Le token vient d'être stocké par api.loginWithGoogle().
+                    // On rafraîchit le profil avant de signaler la connexion
+                    // pour éviter un état utilisateur périmé dans l'UI.
+                    try {
+                        const { api } = await import('../../api.js');
+                        await api.getMe();
+                    } catch (_) {
+                        // Le token reste valide même si /users/me échoue.
+                    }
+
                     this.hide();
                     window.dispatchEvent(new CustomEvent('user-logged-in'));
                     const event = new CustomEvent('navigate-home', { bubbles: true, composed: true });
                     this.dispatchEvent(event);
                 },
                 (err) => {
-                    this._showToast('Échec de la connexion Google.', 'error');
+                    this._showToast((err && err.message) || 'Échec de la connexion Google.', 'error');
                 }
             );
             renderGoogleButton(googleContainer, 'signup_with');

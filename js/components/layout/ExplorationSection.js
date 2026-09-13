@@ -296,8 +296,9 @@ export class ExplorationSection extends HTMLElement {
             grid.querySelectorAll('desire-card').forEach(card => {
                 const cardId = String(card.dataset?.desireId || card.getAttribute('desire-id') || '');
                 if (!cardId) return;
-                // Ne pas écraser le mode 'owner'
-                if (card.getAttribute('mode') === 'owner') return;
+                // Ne pas écraser le mode 'owner' ni le mode 'past'
+                const cardMode = card.getAttribute('mode');
+                if (cardMode === 'owner' || cardMode === 'past') return;
                 if (joinedMap.has(cardId)) {
                     const status = joinedMap.get(cardId);
                     card.setAttribute('mode', status === 'accepted' ? 'joined' : 'pending');

@@ -12,6 +12,7 @@ export class DesireDetailsPage extends HTMLElement {
         this._hasJoined = false; // si l'utilisateur a déjà rejoint
         this._isFull = false;    // si l'envie est complète
         this._isCancelled = false; // si l'activité a été annulée (NAV-06)
+        this._isPast = false;      // si l'activité a déjà eu lieu (catalogue conservé)
         this._isAccepted = false;  // accepté, présence pas encore confirmée (PAR-08)
         this._isConfirmed = false; // présence confirmée (PAR-08)
         /** Position de scroll sauvegardée pour restaurer à la fermeture (body lock). */
@@ -273,6 +274,12 @@ export class DesireDetailsPage extends HTMLElement {
                     background: var(--primary); color: white;
                     font-size: 13px; font-weight: 600; cursor: pointer;
                 }
+                /* Variante neutre : activité passée, ce n'est pas une annulation. */
+                .cancelled-banner.past-banner {
+                    background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-card));
+                    border-color: var(--border-light);
+                    color: var(--text-muted);
+                }
 
                 /* Mise en évidence des champs modifiés (NAV-05) */
                 .field-changed {
@@ -310,7 +317,17 @@ export class DesireDetailsPage extends HTMLElement {
                         <p>L'organisateur a annulé cette envie. Découvre d'autres activités près de toi.</p>
                         <button class="cancelled-banner-btn" id="cancelledAlternativesBtn" type="button">Voir d'autres envies</button>
                     </div>
-                    
+
+                    <!-- État passé : activité déjà terminée, inscriptions closes -->
+                    <div class="cancelled-banner past-banner" id="dPastState">
+                        <div class="cancelled-banner-head">
+                            <i class="material-icons-round">history</i>
+                            <span>Activité déjà passée</span>
+                        </div>
+                        <p>Cette activité a déjà eu lieu. Tu peux consulter son contenu, mais les inscriptions sont closes.</p>
+                        <button class="cancelled-banner-btn" id="pastAlternativesBtn" type="button">Voir d'autres envies</button>
+                    </div>
+
                     <div class="meta-tags" id="dMeta">
                         <span class="m-tag"><i class="material-icons-round">location_on</i> <span id="dCommune">Plateau</span></span>
                         <span class="m-tag"><i class="material-icons-round">calendar_today</i> <span id="dDate">Samedi, 14:00</span></span>
@@ -393,6 +410,18 @@ export class DesireDetailsPage extends HTMLElement {
         const alternativesBtn = this.querySelector('#cancelledAlternativesBtn');
         if (alternativesBtn) {
             alternativesBtn.addEventListener('click', () => {
+                this.close();
+                window.dispatchEvent(new CustomEvent('navigate-home', { bubbles: true, composed: true }));
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('scroll-to-explore', { bubbles: true, composed: true }));
+                }, 150);
+            });
+        }
+
+        // Idem depuis l'état « activité déjà passée ».
+        const pastAlternativesBtn = this.querySelector('#pastAlternativesBtn');
+        if (pastAlternativesBtn) {
+            pastAlternativesBtn.addEventListener('click', () => {
                 this.close();
                 window.dispatchEvent(new CustomEvent('navigate-home', { bubbles: true, composed: true }));
                 setTimeout(() => {
@@ -551,6 +580,15 @@ export class DesireDetailsPage extends HTMLElement {
         }
         if (cancelledBanner) cancelledBanner.style.display = 'none';
 
+        // Activité déjà passée : plus d'inscription possible, bandeau informatif.
+        const pastBanner = this.querySelector('#dPastState');
+        if (this._isPast) {
+            if (pastBanner) pastBanner.style.display = 'flex';
+            if (footer) footer.style.display = 'none';
+            return;
+        }
+        if (pastBanner) pastBanner.style.display = 'none';
+
         if (this._isCreator) {
             if (footer) footer.style.display = 'none';
         } else if (this._isFull) {
@@ -650,6 +688,7 @@ export class DesireDetailsPage extends HTMLElement {
                     description: full.description || '',
                     view_count: full.view_count,
                     desireStatus: full.desire_status,
+                    isPast: full.is_past === true,
                 };
             } catch (err) {
                 console.warn('[DesireDetails] Erreur chargement envie par id:', err);
@@ -658,6 +697,8 @@ export class DesireDetailsPage extends HTMLElement {
 
         // NAV-06 : état annulé détecté depuis le cycle de vie de l'envie.
         this._isCancelled = data.desireStatus === 'cancelled';
+        // Activité déjà passée : consultable mais non rejoignable.
+        this._isPast = data.isPast === true || data.is_past === true;
 
         // Hydrate data
         this.querySelector('#dTitle').textContent = data.title || '';
