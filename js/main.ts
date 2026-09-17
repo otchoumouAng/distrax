@@ -369,6 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialHashQuery = hashRaw.includes('?') ? hashRaw.slice(hashRaw.indexOf('?') + 1) : '';
     const initialNotificationType = new URLSearchParams(initialHashQuery).get('notification') || '';
     const initialNotificationId = new URLSearchParams(initialHashQuery).get('notification_id') || '';
+    const initialEditId = new URLSearchParams(initialHashQuery).get('edit') || '';
     history.replaceState({ page: initialHash }, '', window.location.hash || '#home');
     _currentPageId = initialHash || 'home';
 
@@ -383,6 +384,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetPage = isPublic
             ? (_desireIdFromLink ? 'home' : initialHash)
             : (api.isAuthenticated() ? initialHash : 'login');
+
+        // Édition restaurée depuis l'URL (#creation?edit=<id>) : recharger l'envie
+        // avant d'afficher la page de création.
+        if (initialEditId && api.isAuthenticated() && creationPage) {
+            (creationPage as any)._pendingEdit = { editMode: true, desireId: initialEditId };
+        }
+
         navigateTo(targetPage, false);
         if (_desireIdFromLink) {
             history.replaceState({ page: 'home' }, '', '#home');
@@ -443,6 +451,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // la navigation si l'appel échoue.
         if (target.notificationId && api.isAuthenticated()) {
             api.trackNotificationOpen(target.notificationId).catch(() => {});
+        }
+
+        // Réinitialisation du mot de passe par notification : une simple
+        // assignation d'URL ne changerait que le fragment sans repasser par le
+        // routeur, la page dédiée ne s'afficherait donc pas.
+        if (target.type === 'password_reset') {
+            const token = new URL(target.url).searchParams.get('token') || '';
+            history.replaceState(
+                { page: 'reset-password' },
+                '',
+                `#reset-password?token=${encodeURIComponent(token)}`,
+            );
+            navigateTo('reset-password', false);
+            return;
         }
 
         if (target.desireId) {

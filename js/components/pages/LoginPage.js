@@ -1,4 +1,4 @@
-import { initializeGoogleAuth, renderGoogleButton } from '../../utils/googleAuth.js';
+import { initializeGoogleAuth, renderGoogleButton, setActiveGoogleAuthScope } from '../../utils/googleAuth.js';
 
 export class LoginPage extends HTMLElement {
     constructor() {
@@ -162,23 +162,22 @@ export class LoginPage extends HTMLElement {
 
         const setupGoogle = () => {
             initializeGoogleAuth(
-                async () => {
-                    // Le token vient d'être stocké par api.loginWithGoogle().
-                    // On rafraîchit le profil avant de signaler la connexion,
-                    // sinon l'UI peut s'appuyer sur un cache utilisateur
-                    // périmé (ou absent) et paraître « bloquée ».
-                    try {
-                        const { api } = await import('../../api.js');
-                        await api.getMe();
-                    } catch (_) {
-                        // Le token reste valide même si /users/me échoue :
-                        // on ne bloque pas la connexion pour autant.
-                    }
-
+                'login',
+                () => {
+                    // Le token vient d'être stocké par api.loginWithGoogle() :
+                    // on met à jour l'UI immédiatement, le rafraîchissement du
+                    // profil se fait en arrière-plan (non bloquant).
                     this.hide();
                     window.dispatchEvent(new CustomEvent('user-logged-in'));
                     const event = new CustomEvent('navigate-home', { bubbles: true, composed: true });
                     this.dispatchEvent(event);
+
+                    import('../../api.js')
+                        .then(({ api }) => api.getMe())
+                        .catch(() => {
+                            // Le token reste valide même si /users/me échoue :
+                            // on ne bloque pas la connexion pour autant.
+                        });
                 },
                 (err) => {
                     window.dispatchEvent(new CustomEvent('show-toast', {
@@ -218,6 +217,7 @@ export class LoginPage extends HTMLElement {
             page.style.display = 'block';
             document.body.style.overflow = 'hidden';
             setTimeout(() => page.classList.add('active'), 10);
+            setActiveGoogleAuthScope('login');
             this.reset(); // reset formulaire + bouton
             // Pré-remplir le téléphone si fourni (le mot de passe reste vide)
             if (options.prefillPhone) {

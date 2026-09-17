@@ -1,4 +1,4 @@
-import { initializeGoogleAuth, renderGoogleButton } from '../../utils/googleAuth.js';
+import { initializeGoogleAuth, renderGoogleButton, setActiveGoogleAuthScope } from '../../utils/googleAuth.js';
 
 export class RegisterPage extends HTMLElement {
     constructor() {
@@ -245,21 +245,22 @@ export class RegisterPage extends HTMLElement {
 
         const setupGoogle = () => {
             initializeGoogleAuth(
-                async () => {
-                    // Le token vient d'être stocké par api.loginWithGoogle().
-                    // On rafraîchit le profil avant de signaler la connexion
-                    // pour éviter un état utilisateur périmé dans l'UI.
-                    try {
-                        const { api } = await import('../../api.js');
-                        await api.getMe();
-                    } catch (_) {
-                        // Le token reste valide même si /users/me échoue.
-                    }
-
+                'register',
+                () => {
+                    // Le token vient d'être stocké par api.loginWithGoogle() :
+                    // on met à jour l'UI immédiatement, le rafraîchissement du
+                    // profil se fait en arrière-plan (non bloquant).
                     this.hide();
                     window.dispatchEvent(new CustomEvent('user-logged-in'));
                     const event = new CustomEvent('navigate-home', { bubbles: true, composed: true });
                     this.dispatchEvent(event);
+
+                    import('../../api.js')
+                        .then(({ api }) => api.getMe())
+                        .catch(() => {
+                            // Le token reste valide même si /users/me échoue :
+                            // on ne bloque pas la connexion pour autant.
+                        });
                 },
                 (err) => {
                     this._showToast((err && err.message) || 'Échec de la connexion Google.', 'error');
@@ -361,6 +362,7 @@ export class RegisterPage extends HTMLElement {
             page.style.display = 'block';
             document.body.style.overflow = 'hidden';
             setTimeout(() => page.classList.add('active'), 10);
+            setActiveGoogleAuthScope('register');
 
             this._resetAll();
         }
