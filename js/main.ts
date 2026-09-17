@@ -272,10 +272,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 hide(navbar);
                 if (notificationPage?.show) notificationPage.show();
                 break;
-            case 'creation':
+            case 'creation': {
                 hide(navbar);
+                // L'identifiant de l'envie éditée doit vivre dans l'URL
+                // (#creation?edit=<id>) : sinon un rafraîchissement (F5) repart
+                // sur un formulaire vide, comme s'il s'agissait d'une création.
+                const editingId = (creationPage as any)?._pendingEdit?.desireId || '';
                 if (creationPage?.show) creationPage.show();
+                history.replaceState(
+                    { page: 'creation' },
+                    '',
+                    editingId ? `#creation?edit=${editingId}` : '#creation',
+                );
                 break;
+            }
             case 'profile':
                 hide(navbar);
                 if (profilePage?.show) profilePage.show();
