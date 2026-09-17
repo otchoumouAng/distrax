@@ -529,14 +529,16 @@ export const api = {
 
     /**
      * POST /push/register — Enregistre le token FCM de l'appareil
-     * @param {string} token 
+     * @param {string} token
      * @param {string} platform - 'web', 'android', 'ios'
+     * @param {boolean} resetOnly - Appareil déconnecté : ne reçoit plus que les
+     *   liens de réinitialisation du mot de passe
      */
-    async registerDeviceToken(token, platform = 'web') {
+    async registerDeviceToken(token, platform = 'web', resetOnly = false) {
         const res = await fetch(`${BASE_URL}/push/register`, {
             method: 'POST',
             headers: buildHeaders(),
-            body: JSON.stringify({ token, platform }),
+            body: JSON.stringify({ token, platform, reset_only: resetOnly }),
         });
         return handleResponse(res);
     },

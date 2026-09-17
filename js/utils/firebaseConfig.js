@@ -1,6 +1,6 @@
 // Initialisation de Firebase et de Cloud Messaging
 import { getApp, getApps, initializeApp } from 'firebase/app';
-import { deleteToken, getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging';
+import { getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging';
 import { api } from '../api.js';
 import { extractPushData } from './pushNavigation.js';
 import { escapeHtml } from './escapeHtml.js';
@@ -229,10 +229,12 @@ export function offerPushOptIn(message) {
 }
 
 /**
- * Retire l'association backend avant de supprimer le jeton Firebase local.
- * L'appelant doit attendre la fin de cette fonction avant de vider la session.
+ * Marque l'appareil comme déconnecté côté backend, sans supprimer le jeton FCM :
+ * l'appareil ne reçoit alors plus que les liens de réinitialisation du mot de
+ * passe. L'appelant doit attendre la fin de cette fonction avant de vider la
+ * session (l'appel API a besoin du jeton d'authentification).
  */
-export async function deleteCurrentToken() {
+export async function markCurrentDeviceLoggedOut() {
     const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY) || '';
     let currentToken = storedToken;
 
@@ -244,22 +246,13 @@ export async function deleteCurrentToken() {
         console.warn('Impossible de retrouver le jeton FCM courant :', error);
     }
 
-    try {
-        if (currentToken && api.isAuthenticated()) {
-            await api.deleteDeviceToken(currentToken);
-        }
-    } catch (error) {
-        console.warn('Impossible de retirer le jeton FCM du compte :', error);
+    if (!currentToken || !api.isAuthenticated()) {
+        return;
     }
 
     try {
-        const initialized = await initFirebase();
-        if (initialized) {
-            await deleteToken(initialized.messaging);
-        }
+        await api.registerDeviceToken(currentToken, 'web', true);
     } catch (error) {
-        console.warn('Impossible de supprimer le jeton FCM du navigateur :', error);
-    } finally {
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        console.warn("Impossible de marquer l'appareil comme déconnecté :", error);
     }
 }

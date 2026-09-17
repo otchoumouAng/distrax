@@ -236,10 +236,12 @@ export class ProfilePage extends HTMLElement {
                 const { stop: stopSession } = await import('../../utils/sessionManager.js');
                 stopSession();
 
-                // Retirer l'appareil tant que le jeton d'authentification est
-                // encore disponible pour l'appel backend.
-                const { deleteCurrentToken } = await import('../../utils/firebaseConfig.js');
-                await deleteCurrentToken();
+                // Marquer l'appareil comme déconnecté tant que le jeton
+                // d'authentification est encore disponible pour l'appel
+                // backend : il ne recevra plus que les liens de
+                // réinitialisation du mot de passe.
+                const { markCurrentDeviceLoggedOut } = await import('../../utils/firebaseConfig.js');
+                await markCurrentDeviceLoggedOut();
 
                 api.logout();
                 this.dispatchEvent(new CustomEvent('navigate-login', { bubbles: true, composed: true }));
