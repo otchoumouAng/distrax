@@ -103,6 +103,14 @@ export class ProfilePage extends HTMLElement {
                             <span>Aide et support</span>
                             <i class="material-icons-round profile-action-arrow">chevron_right</i>
                         </button>
+                        <!-- Console d'administration (MNO-12) : révéler uniquement
+                             aux comptes habilités ; l'entrée reste absente du DOM
+                             visible pour tous les autres. -->
+                        <button class="profile-action-item" id="adminBtn" style="display: none;">
+                            <i class="material-icons-round">admin_panel_settings</i>
+                            <span>Administration</span>
+                            <i class="material-icons-round profile-action-arrow">chevron_right</i>
+                        </button>
                         <button class="profile-action-item profile-logout-btn" id="logoutBtn">
                             <i class="material-icons-round" style="color: #ef4444;">logout</i>
                             <span style="color: #ef4444;">Se déconnecter</span>
@@ -228,6 +236,15 @@ export class ProfilePage extends HTMLElement {
             });
         }
 
+        // Console d'administration (MNO-12) — entrée visible seulement pour les
+        // comptes habilités (voir loadProfile), la garde réelle restant l'API.
+        const adminBtn = this.querySelector('#adminBtn');
+        if (adminBtn) {
+            adminBtn.addEventListener('click', () => {
+                this.dispatchEvent(new CustomEvent('navigate-admin', { bubbles: true, composed: true }));
+            });
+        }
+
         // Se déconnecter — arrêt session manager + appel api.logout() + redirection login
         const logoutBtn = this.querySelector('#logoutBtn');
         if (logoutBtn) {
@@ -309,6 +326,10 @@ export class ProfilePage extends HTMLElement {
                 const joinDate = new Date(user.created_at).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
                 subtitleEl.textContent = `Membre depuis ${joinDate}`;
             }
+
+            // Entrée « Administration » (MNO-12) : réservée aux comptes habilités
+            const adminEntry = this.querySelector('#adminBtn');
+            if (adminEntry) adminEntry.style.display = user?.is_admin ? 'flex' : 'none';
 
             // Mise à jour des stats
             const statCreated = this.querySelector('#statCreated');

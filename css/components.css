@@ -2334,3 +2334,931 @@ textarea.form-input {
     height: auto;
     resize: vertical;
 }
+
+/* --- CONSOLE D'ADMINISTRATION (MNO-12) --- */
+.admin-page {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: var(--bg-main);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Accueil de la console : une tuile par section */
+.admin-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+/* `display: grid` l'emporte sur le `[hidden]` du navigateur : on le rétablit. */
+.admin-tiles[hidden] {
+    display: none;
+}
+
+.admin-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 16px;
+    text-align: left;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-tile:active {
+    transform: scale(0.98);
+}
+
+.admin-tile .material-icons-round {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    font-size: 22px;
+    border-radius: 12px;
+    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.admin-tile-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.admin-tile-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.admin-tile-metric {
+    margin-top: 2px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.admin-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    padding: 16px;
+    margin-top: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+}
+
+.admin-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0 0 6px;
+}
+
+.admin-card-title .material-icons-round {
+    font-size: 20px;
+    color: var(--primary);
+}
+
+.admin-card-hint {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+}
+
+.admin-placeholder {
+    font-size: 13px;
+    color: var(--text-light);
+}
+
+.admin-message {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 8px 0;
+}
+
+.admin-message.ok {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.admin-message.error {
+    color: #ef4444;
+}
+
+.admin-badge {
+    display: inline-block;
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* File d'envoi */
+.admin-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.admin-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 72px;
+    padding: 8px 12px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
+.admin-chip b {
+    font-size: 18px;
+    color: var(--text-main);
+}
+
+.admin-chip span {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.admin-chip.failed b,
+.admin-chip.failed span {
+    color: #ef4444;
+}
+
+.admin-chip.pending b {
+    color: #f59e0b;
+}
+
+.admin-chip.sent b {
+    color: #10b981;
+}
+
+/* Interrupteurs */
+.admin-switch-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+}
+
+.admin-switch-row:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.admin-switch-row.is-missing {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.admin-switch-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+}
+
+.admin-switch-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.admin-switch-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.admin-switch-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.admin-switch-track {
+    flex: 0 0 auto;
+    position: relative;
+    width: 46px;
+    height: 26px;
+    border-radius: 100px;
+    background: color-mix(in srgb, var(--text-muted) 30%, transparent);
+    transition: background 0.2s;
+}
+
+.admin-switch-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s;
+}
+
+.admin-switch-input:checked + .admin-switch-track {
+    background: var(--primary);
+}
+
+.admin-switch-row.is-danger .admin-switch-input:checked + .admin-switch-track {
+    background: #10b981;
+}
+
+.admin-switch-input:checked + .admin-switch-track .admin-switch-thumb {
+    transform: translateX(20px);
+}
+
+/* Fenêtre d'envoi paramétrable */
+.admin-setting-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-setting-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+}
+
+.admin-setting-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.admin-setting-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.admin-setting-input {
+    flex: 0 0 auto;
+    width: 108px;
+    text-align: center;
+}
+
+.admin-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.admin-day {
+    min-width: 42px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.admin-day.is-on {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary);
+}
+
+.admin-settings-save {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 14px;
+    padding: 12px;
+    border: none;
+    border-radius: 14px;
+    background: var(--primary);
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.admin-settings-save:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.admin-settings-save .material-icons-round {
+    font-size: 18px;
+}
+
+/* Catalogue des référentiels */
+.admin-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.admin-tab {
+    padding: 7px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 100px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+.admin-tab.is-active {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary);
+}
+
+.admin-catalog-entry {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-catalog-entry:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.admin-catalog-entry.is-inactive .admin-catalog-key,
+.admin-catalog-entry.is-inactive .admin-setting-label {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+.admin-catalog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.admin-catalog-key {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-main);
+    word-break: break-all;
+}
+
+/* L'interrupteur d'activation vit dans l'en-tête : sans bordure ni marge. */
+.admin-catalog-toggle {
+    padding: 0;
+    border-bottom: none;
+    flex: 0 0 auto;
+}
+
+.admin-catalog-text {
+    width: 190px;
+    text-align: left;
+}
+
+/* Ciblage */
+.admin-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    background: transparent;
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.admin-radio:last-child {
+    margin-bottom: 0;
+}
+
+.admin-radio.is-active {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.admin-radio:disabled {
+    opacity: 0.6;
+}
+
+.admin-radio-dot {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    border-radius: 50%;
+    border: 2px solid var(--text-light);
+}
+
+.admin-radio.is-active .admin-radio-dot {
+    border-color: var(--primary);
+    border-width: 5px;
+}
+
+.admin-radio-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.admin-radio-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.admin-radio-hint {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+/* Recherche de comptes */
+.admin-search-form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.admin-search-btn {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #fff;
+    cursor: pointer;
+}
+
+.admin-user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.admin-user-row.is-selected {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.admin-user-avatar {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.admin-user-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.admin-user-pseudo {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.admin-user-phone {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.admin-user-arrow {
+    color: var(--text-light);
+}
+
+.admin-user-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    margin-top: 4px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.admin-user-head strong {
+    display: block;
+    font-size: 14px;
+    color: var(--text-main);
+}
+
+.admin-user-head small {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.admin-test-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 12px;
+    background: var(--primary);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.admin-test-btn:disabled {
+    opacity: 0.6;
+}
+
+.admin-test-btn .material-icons-round {
+    font-size: 18px;
+}
+
+.admin-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-light);
+    margin: 18px 0 8px;
+}
+
+.admin-finding {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+}
+
+.admin-finding strong {
+    display: block;
+    font-size: 13.5px;
+    color: var(--text-main);
+}
+
+.admin-finding p {
+    margin: 4px 0 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.admin-facts {
+    margin: 0;
+    font-size: 13px;
+}
+
+.admin-facts>div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-facts>div:last-child {
+    border-bottom: none;
+}
+
+.admin-facts dt {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+}
+
+.admin-facts dd {
+    margin: 0;
+    text-align: right;
+    color: var(--text-main);
+}
+
+.admin-journal-row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-journal-row:last-child {
+    border-bottom: none;
+}
+
+.admin-journal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.admin-journal-type {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.admin-journal-meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.admin-journal-error {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #ef4444;
+}
+
+/* Campagnes de notification (MNO-18) */
+.admin-campaign-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.admin-campaign-body {
+    min-height: 76px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+.admin-campaign-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+/* Les deux boutons partagent la ligne : l'aperçu garde sa largeur, la
+   validation prend le reste. */
+.admin-campaign-actions .admin-settings-save {
+    flex: 1 1 auto;
+    width: auto;
+    margin-top: 0;
+}
+
+.admin-campaign-actions .admin-test-btn {
+    justify-content: center;
+}
+
+/* Case à cocher de sélection d'un destinataire, en bout de ligne. */
+.admin-campaign-pick {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+/* Puce d'un destinataire déjà retenu : la croix invite à le retirer, donc
+   disposition en ligne plutôt que la colonne par défaut de `.admin-chip`. */
+.admin-campaign-picked {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    border: none;
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.admin-campaign-picked b {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.admin-campaign-picked .material-icons-round {
+    font-size: 14px;
+    color: var(--primary);
+}
+
+.admin-campaign-item {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-campaign-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.admin-campaign-message {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.admin-campaign-cancel {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-light);
+    border-radius: 100px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.admin-campaign-cancel .material-icons-round {
+    font-size: 16px;
+}
+
+/* Suivi et gestion des comptes (MNO-19) */
+.admin-user-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.admin-user-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.admin-user-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-light);
+    border-radius: 100px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.admin-user-toggle input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.admin-user-total {
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.admin-user-entry {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+}
+
+.admin-user-entry.is-blocked {
+    border-color: color-mix(in srgb, #ef4444 40%, var(--border-light));
+    background: color-mix(in srgb, #ef4444 6%, transparent);
+}
+
+.admin-user-meta {
+    font-size: 11.5px;
+    color: var(--text-light);
+}
+
+.admin-user-blocked-reason {
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #ef4444;
+    word-break: break-word;
+}
+
+.admin-user-btn {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 4px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 100px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.admin-user-btn .material-icons-round {
+    font-size: 16px;
+}
+
+.admin-user-btn.is-danger {
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+.admin-user-block-form {
+    display: flex;
+    align-items: center;
+    flex: 1 1 100%;
+    gap: 8px;
+}
+
+.admin-user-block-form[hidden] {
+    display: none;
+}
+
+.admin-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.admin-page-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--border-light);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.admin-page-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.admin-page-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+

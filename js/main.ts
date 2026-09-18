@@ -37,6 +37,7 @@ import './components/pages/ForgotPasswordPage.js';
 import './components/pages/ResetPasswordPage.js';
 import './components/pages/BoostPage.js';
 import './components/pages/BoostDetailsPage.js';
+import './components/pages/AdminPage.js';
 
 /* ---------------------------------------------------------------
    4. THÈME — mode clair uniquement
@@ -106,6 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const boostPage = get<any>('app-boost-page');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const boostDetailsPage = get<any>('app-boost-details-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const adminPage = get<any>('app-admin-page');
 
     // --- Overlay de transition entre pages ---
     const transitionOverlay = document.createElement('div');
@@ -225,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (forgotPasswordPage?.hide) forgotPasswordPage.hide();
         if (resetPasswordPage?.hide) resetPasswordPage.hide();
         if (boostPage?.hide) boostPage.hide();
+        if (adminPage?.hide) adminPage.hide();
 
         // Afficher la page demandée
         switch (pageId) {
@@ -311,6 +315,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (boostPage?.open) boostPage.open(_pendingBoostData || {});
                 _pendingBoostData = null;
                 break;
+            case 'admin':
+                hide(navbar);
+                if (adminPage?.show) adminPage.show();
+                break;
         }
 
         _currentPageId = pageId;
@@ -359,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
             (desireDetailsPage as any).close();
             return;
         }
-        if (_currentPageId === 'login' || _currentPageId === 'register' || _currentPageId === 'creation' || _currentPageId === 'profile' || _currentPageId === 'notifications') {
+        if (_currentPageId === 'login' || _currentPageId === 'register' || _currentPageId === 'creation' || _currentPageId === 'profile' || _currentPageId === 'notifications' || _currentPageId === 'admin') {
             history.replaceState({ page: 'home' }, '', '#home');
             navigateTo('home', false);
             return;
@@ -523,6 +531,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('navigate-notifications', () => guardedNavigate('notifications'));
     window.addEventListener('navigate-creation', () => guardedNavigate('creation'));
     window.addEventListener('navigate-profile', () => guardedNavigate('profile'));
+    // Console d'administration (MNO-12) : protégée par le jeton ; l'API refuse
+    // en 403 les comptes ordinaires et la page se referme d'elle-même.
+    window.addEventListener('navigate-admin', () => guardedNavigate('admin'));
     window.addEventListener('navigate-login', () => navigateTo('login'));   // public
     window.addEventListener('navigate-register', () => navigateTo('register')); // public
     window.addEventListener('navigate-forgot-password', () => navigateTo('forgot-password'));

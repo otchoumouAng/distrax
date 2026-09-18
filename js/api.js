@@ -525,6 +525,257 @@ export const api = {
         return handleResponse(res);
     },
 
+    /**
+     * PATCH /features/:slug — Bascule une fonctionnalité [admin]
+     * Voie des interrupteurs simples : arrêt d'urgence du moteur, plage de
+     * tranquillité, plafond quotidien (MNO-05, MNO-12).
+     * @returns {Promise<{slug, label, description, is_active}>}
+     */
+    async setFeatureActive(slug, isActive) {
+        const res = await fetch(`${BASE_URL}/features/${encodeURIComponent(slug)}`, {
+            method: 'PATCH',
+            headers: buildHeaders(),
+            body: JSON.stringify({ is_active: Boolean(isActive) }),
+        });
+        return handleResponse(res);
+    },
+
+    // ── Console d'administration (MNO-12) ────────────────────────
+    // Toutes ces routes sont réservées aux comptes habilités : l'API répond 403
+    // à un compte ordinaire, la garde côté interface n'est qu'un confort.
+
+    /** GET /admin/targeting — Mode de gratuité du ciblage en vigueur + options */
+    async getAdminTargeting() {
+        const res = await fetch(`${BASE_URL}/admin/targeting`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    /** PUT /admin/targeting — Choisit le mode de gratuité du ciblage [admin] */
+    async setAdminTargeting(mode) {
+        const res = await fetch(`${BASE_URL}/admin/targeting`, {
+            method: 'PUT',
+            headers: buildHeaders(),
+            body: JSON.stringify({ mode }),
+        });
+        return handleResponse(res);
+    },
+
+    /** GET /admin/users?q= — Recherche un compte par pseudo ou téléphone [admin] */
+    async searchAdminUsers(query, limit = 20) {
+        const params = new URLSearchParams({ q: String(query).trim(), limit: String(limit) });
+        const res = await fetch(`${BASE_URL}/admin/users?${params}`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    /** GET /admin/users/:id/journal — Livraisons et file d'un compte [admin] */
+    async getAdminUserJournal(userId, limit = 20) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        const res = await fetch(`${BASE_URL}/admin/users/${userId}/journal?${params}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /** GET /admin/users/:id/diagnostic — Causes probables d'un non-envoi [admin] */
+    async getAdminUserDiagnostic(userId) {
+        const res = await fetch(`${BASE_URL}/admin/users/${userId}/diagnostic`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /** POST /admin/users/:id/test — Envoie un push de vérification [admin] */
+    async sendAdminTestNotification(userId) {
+        const res = await fetch(`${BASE_URL}/admin/users/${userId}/test`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /** GET /admin/outbox — Répartition de la file d'envoi par statut [admin] */
+    async getAdminOutbox() {
+        const res = await fetch(`${BASE_URL}/admin/outbox`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /admin/settings — Réglages de plateforme (MNO-15)
+     * Chaque entrée porte sa clé, son libellé, son type et sa valeur.
+     * @returns {Promise<{settings: Array<{key, label, kind, hint, value}>}>}
+     */
+    async getAdminSettings() {
+        const res = await fetch(`${BASE_URL}/admin/settings`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    /**
+     * PUT /admin/settings — Modifie les réglages de plateforme [admin]
+     * @param {Object} values - Valeurs indexées par clé (envoi partiel accepté)
+     * @returns {Promise<{settings: Array}>}
+     */
+    async setAdminSettings(values) {
+        const res = await fetch(`${BASE_URL}/admin/settings`, {
+            method: 'PUT',
+            headers: buildHeaders(),
+            body: JSON.stringify({ values }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /admin/catalog — Référentiels administrables (MNO-17)
+     * La console construit ses onglets et ses colonnes à partir de cette
+     * description : elle n'énumère aucun référentiel.
+     * @returns {Promise<{catalogs: Array<{key, label, hint, key_columns, fields}>}>}
+     */
+    async getAdminCatalog() {
+        const res = await fetch(`${BASE_URL}/admin/catalog`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /admin/catalog/:key — Entrées d'un référentiel, inactives comprises [admin]
+     * @param {string} key - Identifiant du référentiel, ex. « categories »
+     * @returns {Promise<{key, label, fields, entries: Array<Object>}>}
+     */
+    async getAdminCatalogEntries(key) {
+        const res = await fetch(`${BASE_URL}/admin/catalog/${encodeURIComponent(key)}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * PATCH /admin/catalog/:key/:entryKey — Modifie les champs d'une entrée [admin]
+     * @param {string} key - Identifiant du référentiel
+     * @param {string} entryKey - Clé de l'entrée (« slug » ou « option/zone »)
+     * @param {Object} values - Champs à modifier, par nom de colonne
+     * @returns {Promise<Object>} L'entrée telle qu'enregistrée
+     */
+    async updateAdminCatalogEntry(key, entryKey, values) {
+        const path = String(entryKey).split('/').map(encodeURIComponent).join('/');
+        const res = await fetch(`${BASE_URL}/admin/catalog/${encodeURIComponent(key)}/${path}`, {
+            method: 'PATCH',
+            headers: buildHeaders(),
+            body: JSON.stringify({ values }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /admin/campaigns — Campagnes de notification et leur avancement [admin]
+     * Le vocabulaire accepté (canaux, modes d'audience) vient du serveur : la
+     * console n'énumère aucune valeur en dur (MNO-18).
+     * @returns {Promise<{campaigns: Array<Object>, options: {channels: string[], audience_modes: string[]}}>}
+     */
+    async getAdminCampaigns() {
+        const res = await fetch(`${BASE_URL}/admin/campaigns`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /admin/campaigns/preview — Comptes visés et comptes joignables [admin]
+     * N'écrit rien : sert à constater le poids d'une audience avant validation,
+     * et à poser la photo figée au moment de la validation (MNO-18c).
+     * @param {{audience_mode: string, user_ids?: string[]}} audience
+     * @returns {Promise<{audience_mode: string, users: number, reachable: number}>}
+     */
+    async previewAdminCampaign(audience) {
+        const res = await fetch(`${BASE_URL}/admin/campaigns/preview`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify(audience),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /admin/campaigns — Valide une campagne de notification [admin]
+     * @param {Object} campaign - title, body, channel, audience_mode, user_ids, scheduled_at
+     * @returns {Promise<Object>} La campagne telle qu'enregistrée (état réel)
+     */
+    async createAdminCampaign(campaign) {
+        const res = await fetch(`${BASE_URL}/admin/campaigns`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify(campaign),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /admin/campaigns/:id/cancel — Annule une campagne avant son départ [admin]
+     * @param {string} campaignId
+     * @returns {Promise<Object>} La campagne annulée
+     */
+    async cancelAdminCampaign(campaignId) {
+        const res = await fetch(`${BASE_URL}/admin/campaigns/${encodeURIComponent(campaignId)}/cancel`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    // ── Suivi et gestion des comptes (MNO-19) ────────────────────
+
+    /**
+     * GET /admin/users/directory — Liste filtrée et paginée des comptes [admin]
+     * Répond aux questions d'ensemble (« qui a installé l'application », « qui
+     * est bloqué ») là où `searchAdminUsers` ne retrouve qu'un compte connu.
+     * Les filtres vides ne sont pas transmis : ils ne veulent rien dire (MNO-19).
+     * @param {{q?: string, device?: string, blocked?: boolean, admin?: boolean, page?: number, per_page?: number}} filters
+     * @returns {Promise<{users: Array<Object>, total: number, page: number, per_page: number, pages: number}>}
+     */
+    async getAdminUsersDirectory(filters = {}) {
+        const params = new URLSearchParams();
+        if (filters.q) params.set('q', String(filters.q).trim());
+        if (filters.device) params.set('device', filters.device);
+        if (filters.blocked !== undefined && filters.blocked !== null) {
+            params.set('blocked', String(filters.blocked));
+        }
+        if (filters.admin !== undefined && filters.admin !== null) {
+            params.set('admin', String(filters.admin));
+        }
+        if (filters.page) params.set('page', String(filters.page));
+        if (filters.per_page) params.set('per_page', String(filters.per_page));
+        const res = await fetch(`${BASE_URL}/admin/users/directory?${params}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /admin/users/:id/block — Bloque un compte, avec motif [admin]
+     * Le blocage est relu à chaque requête : la session ouverte du compte est
+     * refusée en 403 dès l'appel suivant (MNO-19a).
+     * @param {string} userId
+     * @param {string} [reason] - Motif saisi par l'exploitation
+     * @returns {Promise<Object>} Le compte bloqué
+     */
+    async blockAdminUser(userId, reason = null) {
+        const res = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(userId)}/block`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify({ reason: reason || null }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /admin/users/:id/unblock — Lève le blocage d'un compte [admin]
+     * Le motif et l'horodatage sont effacés : une sanction levée ne s'affiche plus.
+     * @param {string} userId
+     * @returns {Promise<Object>} Le compte rouvert
+     */
+    async unblockAdminUser(userId) {
+        const res = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(userId)}/unblock`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
     // ── Push Notifications (FCM) ─────────────────────────────────
 
     /**
