@@ -228,7 +228,7 @@ export class AdminPage extends HTMLElement {
                     </div>
 
                     <!-- Gratuité du ciblage (MNO-05) -->
-                    <div class="admin-card">
+                    <div class="admin-card" data-admin-section="engine" hidden>
                         <h3 class="admin-card-title">
                             <i class="material-icons-round">ads_click</i> Ciblage des envies
                         </h3>
@@ -257,7 +257,7 @@ export class AdminPage extends HTMLElement {
                     </div>
 
                     <!-- Campagnes de notification (MNO-18) -->
-                    <div class="admin-card">
+                    <div class="admin-card" data-admin-section="campaigns" hidden>
                         <h3 class="admin-card-title">
                             <i class="material-icons-round">campaign</i> Campagnes
                         </h3>
