@@ -70,7 +70,7 @@ const NOTIFICATION_ACTIONS = {
     join_accepted: { label: 'Confirmer ma présence', target: 'confirm-presence' },
     join_rejected: { label: "Voir d'autres envies", target: '' },
     presence_confirm: { label: 'Je confirme', target: 'confirm-presence' },
-    organizer_keep: { label: "Maintenir l'activité", target: '' },
+    organizer_keep: { label: "Maintenir l'activité", target: 'maintenance' },
     reminder_day: { label: 'Voir les détails', target: 'practical-info' },
     reminder_soon: { label: "Voir l'itinéraire", target: 'practical-info' },
     desire_updated: { label: 'Voir la modification', target: 'practical-info' },

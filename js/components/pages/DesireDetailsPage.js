@@ -376,6 +376,18 @@ export class DesireDetailsPage extends HTMLElement {
                         <button class="cancelled-banner-btn" id="pastAlternativesBtn" type="button">Voir d'autres envies</button>
                     </div>
 
+                    <!-- Maintien organisateur (ORG-08/09) : l'échéance approche,
+                         l'organisateur confirme, modifie ou annule. -->
+                    <div class="maintenance-strip" id="dMaintenanceStrip" style="display: none;">
+                        <div class="maintenance-head"><i class="material-icons-round">event_available</i><span>Ton activité approche</span></div>
+                        <p>Confirme qu'elle est maintenue afin de prévenir les participants.</p>
+                        <div class="maintenance-actions">
+                            <button class="maint-keep-btn" id="maintKeepBtn" type="button"><i class="material-icons-round">check</i> Maintenir</button>
+                            <button class="maint-edit-btn" id="maintEditBtn" type="button"><i class="material-icons-round">edit</i> Modifier</button>
+                            <button class="maint-cancel-btn" id="maintCancelBtn" type="button"><i class="material-icons-round">event_busy</i> Annuler</button>
+                        </div>
+                    </div>
+
                     <div class="meta-tags" id="dMeta">
                         <span class="m-tag"><i class="material-icons-round">location_on</i> <span id="dCommune">Plateau</span></span>
                         <span class="m-tag"><i class="material-icons-round">calendar_today</i> <span id="dDate">Samedi, 14:00</span></span>
@@ -499,6 +511,71 @@ export class DesireDetailsPage extends HTMLElement {
                 setTimeout(() => {
                     window.dispatchEvent(new CustomEvent('scroll-to-explore', { bubbles: true, composed: true }));
                 }, 150);
+            });
+        }
+
+        // ── Maintien organisateur (ORG-08/09) ───────────────────
+        const maintKeepBtn = this.querySelector('#maintKeepBtn');
+        if (maintKeepBtn) {
+            maintKeepBtn.addEventListener('click', async () => {
+                if (!this._isCreator || !this._desireId) return;
+                maintKeepBtn.disabled = true;
+                try {
+                    const { api } = await import('../../api.js');
+                    await api.keepDesire(this._desireId);
+                    this._needsMaintenance = false;
+                    this._applyMaintenanceState({});
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Activité maintenue. Les participants sont prévenus.', type: 'success' } }));
+                    window.dispatchEvent(new CustomEvent('profile-refresh'));
+                } catch (err) {
+                    maintKeepBtn.disabled = false;
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: err.message || 'Erreur', type: 'error' } }));
+                }
+            });
+        }
+
+        const maintEditBtn = this.querySelector('#maintEditBtn');
+        if (maintEditBtn) {
+            maintEditBtn.addEventListener('click', () => {
+                if (!this._isCreator || !this._desireId) return;
+                this.close();
+                window.dispatchEvent(new CustomEvent('navigate-create', {
+                    detail: { editMode: true, desireId: this._desireId },
+                    bubbles: true,
+                    composed: true
+                }));
+            });
+        }
+
+        const maintCancelBtn = this.querySelector('#maintCancelBtn');
+        if (maintCancelBtn) {
+            maintCancelBtn.addEventListener('click', async () => {
+                if (!this._isCreator || !this._desireId) return;
+                const { showConfirm } = await import('../../utils/confirm.js');
+                const ok = await showConfirm({
+                    title: 'Annuler cette envie ?',
+                    message: 'Les participants seront prévenus que l\'activité est annulée.',
+                    confirmLabel: 'Oui, annuler',
+                    cancelLabel: 'Retour',
+                    type: 'danger',
+                });
+                if (!ok) return;
+
+                maintCancelBtn.disabled = true;
+                try {
+                    const { api } = await import('../../api.js');
+                    await api.updateDesire(this._desireId, { status: 'cancelled' });
+                    this._isCancelled = true;
+                    this._needsMaintenance = false;
+                    this._applyMaintenanceState({});
+                    const joinBtn = this.querySelector('#joinActionBtn');
+                    this._updateJoinButton(joinBtn);
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: 'Activité annulée. Les participants sont prévenus.', type: 'info' } }));
+                    window.dispatchEvent(new CustomEvent('profile-refresh'));
+                } catch (err) {
+                    maintCancelBtn.disabled = false;
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: err.message || 'Erreur', type: 'error' } }));
+                }
             });
         }
 
@@ -843,6 +920,7 @@ export class DesireDetailsPage extends HTMLElement {
                     view_count: full.view_count,
                     desireStatus: full.desire_status,
                     isPast: full.is_past === true,
+                    needs_maintenance: full.needs_maintenance === true,
                 };
             } catch (err) {
                 console.warn('[DesireDetails] Erreur chargement envie par id:', err);
@@ -853,6 +931,8 @@ export class DesireDetailsPage extends HTMLElement {
         this._isCancelled = data.desireStatus === 'cancelled';
         // Activité déjà passée : consultable mais non rejoignable.
         this._isPast = data.isPast === true || data.is_past === true;
+        // ORG-08/09 : maintien à confirmer (organisateur, échéance proche).
+        this._needsMaintenance = data.needs_maintenance === true;
         this._desireStatus = data.desireStatus || data.desire_status || '';
 
         // Like ♥ : état initial issu de la carte (likeCount/likedByMe) ou de l'API.
@@ -970,6 +1050,7 @@ export class DesireDetailsPage extends HTMLElement {
             'participant-requests': '#participantsSection',
             'confirm-presence': '#joinActionBtn',
             'practical-info': '#dMeta',
+            'maintenance': '#dMaintenanceStrip',
         };
         const selector = selectors[focus];
         if (!selector) return;
@@ -1046,6 +1127,7 @@ export class DesireDetailsPage extends HTMLElement {
             if (this._isCreator) {
                 // —— Mode créateur : afficher les intéressés ——
                 participantsSection?.classList.add('visible');
+                this._applyMaintenanceState(data);
                 await this._loadParticipants(api);
             } else if (data.spots === 'Complet') {
                 // —— Envie complète ——
@@ -1067,6 +1149,20 @@ export class DesireDetailsPage extends HTMLElement {
                 this._updateJoinButton(joinBtn);
             }
         }
+    }
+
+    /**
+     * Affiche le bandeau de maintien à l'organisateur dont l'échéance approche
+     * (ORG-08/09), tant qu'il ne s'est pas prononcé et que l'activité n'est ni
+     * annulée ni passée.
+     * @param {object} data
+     */
+    _applyMaintenanceState(data) {
+        const strip = this.querySelector('#dMaintenanceStrip');
+        if (!strip) return;
+        const needed = data?.needs_maintenance === true || this._needsMaintenance === true;
+        const visible = this._isCreator && needed && !this._isCancelled && !this._isPast;
+        strip.style.display = visible ? 'flex' : 'none';
     }
 
     /**
