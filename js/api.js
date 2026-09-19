@@ -12,6 +12,10 @@ const BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && impor
 
 // ── Helpers internes ─────────────────────────────────────────────
 
+// Clés de stockage du contexte pays (contrainte DEC-03 : jeton en en-tête).
+const COUNTRY_CONTEXT_KEY = 'dystrax-country-context';
+const COUNTRY_CODE_KEY = 'dystrax-country-code';
+
 function getToken() {
     return localStorage.getItem('dystrax-token');
 }
@@ -23,17 +27,114 @@ function setToken(token) {
 function removeToken() {
     localStorage.removeItem('dystrax-token');
     localStorage.removeItem('dystrax-user');
+    // Une déconnexion supprime le contexte lié au compte précédent (VIS-10).
+    clearCountryContext();
 }
 
 function isAuthenticated() {
     return !!getToken();
 }
 
-function buildHeaders(extra = {}) {
+function buildHeaders(extra = {}, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...extra };
     const token = getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Transport du contexte pays sur toutes les routes applicatives ;
+    // les routes d'authentification le désactivent explicitement.
+    if (options.withCountry !== false) {
+        const countryContext = getCountryContextToken();
+        if (countryContext) headers['X-Country-Context'] = countryContext;
+    }
     return headers;
+}
+
+// ── Contexte pays ────────────────────────────────────────────────
+
+/** Jeton signé du contexte pays, transporté via X-Country-Context. */
+function getCountryContextToken() {
+    return localStorage.getItem(COUNTRY_CONTEXT_KEY);
+}
+
+/** Code du pays effectif, conservé pour isoler les caches et l'affichage. */
+function getCountryCode() {
+    return localStorage.getItem(COUNTRY_CODE_KEY) || null;
+}
+
+/**
+ * Aligne la réponse de contexte de l'API sur la forme attendue par l'app.
+ *
+ * L'API expose `effective_country_code` et `context_token` (§14 du cahier des
+ * charges). On les traduit ici en `country_code` et `token` pour le reste de
+ * l'app, et `needs_choice` signale l'absence de pays utilisable (choix manuel
+ * requis). Les champs d'origine (source, detected_country_code,
+ * confirmation_required, can_confirm) sont conservés pour l'affichage.
+ */
+function normalizeCountryContext(data) {
+    if (!data) return data;
+    const countryCode = data.effective_country_code || null;
+    return {
+        ...data,
+        country_code: countryCode,
+        token: data.context_token || null,
+        needs_choice: !countryCode,
+    };
+}
+
+/** Mémorise le contexte renvoyé par l'API (jeton et pays effectif). */
+function rememberCountryContext(data) {
+    if (!data) return;
+    if (data.token) localStorage.setItem(COUNTRY_CONTEXT_KEY, data.token);
+    if (data.country_code) localStorage.setItem(COUNTRY_CODE_KEY, data.country_code);
+    else localStorage.removeItem(COUNTRY_CODE_KEY);
+}
+
+/** Caches locaux dépendants du pays : toute clé inclut le code pays (VIS-10). */
+const _countryCaches = new Map();
+
+/**
+ * Exécute un chargement paresseux mis en cache pour un couple
+ * (ressource, code pays). Chaque entrée retient l'AbortController qui l'a
+ * produite : purger le cache invalide donc aussi les requêtes en vol, et une
+ * réponse tardive d'un ancien pays ne peut plus être consommée (VIS-11).
+ */
+async function withCountryCache(resource, countryCode, loader) {
+    const key = `${resource}:${countryCode || 'neutral'}`;
+    const existing = _countryCaches.get(key);
+    if (existing) {
+        return existing.value !== undefined ? existing.value : existing.promise;
+    }
+    const controller = new AbortController();
+    const entry = { controller, value: undefined, promise: null };
+    _countryCaches.set(key, entry);
+    entry.promise = loader(controller.signal)
+        .then((value) => {
+            entry.value = value;
+            entry.promise = null;
+            return value;
+        })
+        .catch((err) => {
+            _countryCaches.delete(key);
+            throw err;
+        });
+    return entry.promise;
+}
+
+function purgeCountryCaches() {
+    // Interrompt les requêtes en vol : leurs réponses deviennent obsolètes.
+    for (const entry of _countryCaches.values()) entry.controller.abort();
+    _countryCaches.clear();
+}
+
+/** Purge les caches si le pays effectif a changé depuis le dernier appel. */
+function purgeCountryCachesIfChanged(countryCode) {
+    if ((countryCode || null) !== getCountryCode()) purgeCountryCaches();
+}
+
+/** Supprime le contexte pays (déconnexion, changement de compte). */
+function clearCountryContext() {
+    localStorage.removeItem(COUNTRY_CONTEXT_KEY);
+    localStorage.removeItem(COUNTRY_CODE_KEY);
+    purgeCountryCaches();
 }
 
 async function handleResponse(res) {
@@ -73,7 +174,7 @@ export const api = {
     async register(pseudo, phone, password) {
         const res = await fetch(`${BASE_URL}/auth/register`, {
             method: 'POST',
-            headers: buildHeaders(),
+            headers: buildHeaders({}, { withCountry: false }),
             body: JSON.stringify({ pseudo, phone, password }),
         });
         return handleResponse(res);
@@ -88,7 +189,7 @@ export const api = {
     async verifyOtp(phone, otpCode) {
         const res = await fetch(`${BASE_URL}/auth/verify-otp`, {
             method: 'POST',
-            headers: buildHeaders(),
+            headers: buildHeaders({}, { withCountry: false }),
             body: JSON.stringify({ phone, otp_code: otpCode }),
         });
         return handleResponse(res);
@@ -97,11 +198,13 @@ export const api = {
     /**
      * Connexion : POST /auth/login (OAuth2PasswordRequestForm)
      * Stocke le JWT en localStorage après succès.
+     * @param {string} identifier - Numéro de téléphone ou adresse email du compte
+     * @param {string} password - Mot de passe
      * @returns {Promise<{access_token, token_type}>}
      */
-    async login(phone, password) {
+    async login(identifier, password) {
         // Encodage explicite pour éviter tout problème avec @, &, +, etc. dans le mot de passe
-        const body = `username=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}`;
+        const body = `username=${encodeURIComponent(identifier)}&password=${encodeURIComponent(password)}`;
         const res = await fetch(`${BASE_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -148,14 +251,14 @@ export const api = {
 
     /**
      * Mot de passe oublié : POST /auth/forgot-password
-     * @param {string} phone - Numéro de téléphone du compte
+     * @param {string} identifier - Numéro de téléphone ou adresse email du compte
      * @returns {Promise<{message?: string}>}
      */
-    async forgotPassword(phone) {
+    async forgotPassword(identifier) {
         const res = await fetch(`${BASE_URL}/auth/forgot-password`, {
             method: 'POST',
-            headers: buildHeaders(),
-            body: JSON.stringify({ phone: String(phone).trim() }),
+            headers: buildHeaders({}, { withCountry: false }),
+            body: JSON.stringify({ identifier: String(identifier).trim() }),
         });
         return handleResponse(res);
     },
@@ -169,13 +272,90 @@ export const api = {
     async resetPassword(token, new_password) {
         const res = await fetch(`${BASE_URL}/auth/reset-password`, {
             method: 'POST',
-            headers: buildHeaders(),
+            headers: buildHeaders({}, { withCountry: false }),
             body: JSON.stringify({ token: String(token).trim(), new_password: String(new_password) }),
         });
         return handleResponse(res);
     },
 
     isAuthenticated,
+
+    // ── Géographie : contexte pays ──────────────────────────────
+
+    /** Code pays effectif mémorisé localement (lecture synchrone). */
+    getCountryCode,
+
+    /**
+     * GET /geography/context — Contexte pays effectif (auth optionnelle)
+     * Renvoie { country_code, source, country, token, needs_choice }. Le jeton
+     * est mémorisé pour être transporté en en-tête sur les appels suivants.
+     * @param {Object} [options] - { signal }
+     * @returns {Promise<{country_code, source, country, token, needs_choice}>}
+     */
+    async getCountryContext(options = {}) {
+        const res = await fetch(`${BASE_URL}/geography/context`, {
+            headers: buildHeaders(),
+            signal: options.signal,
+        });
+        const data = normalizeCountryContext(await handleResponse(res));
+        // Un pays résolu différent du précédent rend les caches caducs (VIS-10).
+        purgeCountryCachesIfChanged(data?.country_code);
+        rememberCountryContext(data);
+        return data;
+    },
+
+    /**
+     * POST /geography/context — Choix ou correction explicite du pays
+     * @param {string} countryCode - Code pays, ex. « CI »
+     * @returns {Promise<{country_code, source, country, token, needs_choice}>}
+     */
+    async setCountryContext(countryCode) {
+        const res = await fetch(`${BASE_URL}/geography/context`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify({ country_code: countryCode }),
+        });
+        const data = normalizeCountryContext(await handleResponse(res));
+        // Après succès, les caches locaux dépendants de l'ancien pays sont purgés
+        // et les requêtes en vol invalidées avant de mémoriser le nouveau contexte.
+        purgeCountryCaches();
+        rememberCountryContext(data);
+        return data;
+    },
+
+    /**
+     * GET /geography/countries — Pays proposés dans le sélecteur
+     * @returns {Promise<Array<{code, label, is_active}>>}
+     */
+    async getCountries() {
+        return withCountryCache('countries', null, async (signal) => {
+            const res = await fetch(`${BASE_URL}/geography/countries`, {
+                headers: buildHeaders(),
+                signal,
+            });
+            const data = await handleResponse(res);
+            return Array.isArray(data) ? data : (data?.countries || []);
+        });
+    },
+
+    /**
+     * GET /geography/cities — Villes/communes du pays effectif (VIS-04)
+     * @param {string} [countryCode] - Par défaut le pays du contexte courant
+     * @returns {Promise<Array<{id, country_code, label, slug}>>}
+     */
+    async getCities(countryCode) {
+        const code = countryCode || getCountryCode();
+        const params = new URLSearchParams();
+        if (code) params.set('country_code', code);
+        return withCountryCache('cities', code, async (signal) => {
+            const res = await fetch(`${BASE_URL}/geography/cities?${params}`, {
+                headers: buildHeaders(),
+                signal,
+            });
+            const data = await handleResponse(res);
+            return Array.isArray(data) ? data : (data?.cities || []);
+        });
+    },
 
     // ── Utilisateur courant ─────────────────────────────────────
 
@@ -227,9 +407,12 @@ export const api = {
 
     /**
      * GET /desires — Liste filtrée des envies
+     * La commune est un libellé du pays courant : le client n'impose jamais de
+     * pays, c'est le contexte (X-Country-Context) qui borne le catalogue.
      * @param {Object} filters - { query, category, commune, price_type, date, page, size }
+     * @param {Object} [options] - { signal } pour invalider une requête obsolète
      */
-    async fetchDesires(filters = {}) {
+    async fetchDesires(filters = {}, options = {}) {
         const params = new URLSearchParams();
         if (filters.query) params.set('query', filters.query);
         if (filters.category) params.set('category', filters.category);
@@ -242,6 +425,7 @@ export const api = {
 
         const res = await fetch(`${BASE_URL}/desires?${params}`, {
             headers: buildHeaders(),
+            signal: options.signal,
         });
         return handleResponse(res);
     },
@@ -309,6 +493,30 @@ export const api = {
      */
     async leaveDesire(id) {
         const res = await fetch(`${BASE_URL}/desires/${id}/join`, {
+            method: 'DELETE',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /desires/:id/like — Aimer une envie [auth]
+     * @returns {Promise<{liked: boolean, like_count: number}>}
+     */
+    async likeDesire(id) {
+        const res = await fetch(`${BASE_URL}/desires/${id}/like`, {
+            method: 'POST',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * DELETE /desires/:id/like — Retirer son like [auth]
+     * @returns {Promise<{liked: boolean, like_count: number}>}
+     */
+    async unlikeDesire(id) {
+        const res = await fetch(`${BASE_URL}/desires/${id}/like`, {
             method: 'DELETE',
             headers: buildHeaders(),
         });
@@ -600,6 +808,45 @@ export const api = {
     },
 
     /**
+     * GET /admin/outbox/entries — Envois individuels de la file [admin]
+     * Chaque carte porte son destinataire et le CTA natif transporté par
+     * l'envoi (action_label / action_target), relu sous les mêmes clés que
+     * l'appareil.
+     * @param {{status?: string, campaign_id?: string, limit?: number, offset?: number}} [filters]
+     * @returns {Promise<{entries: Array<Object>, total: number}>}
+     */
+    async getAdminOutboxEntries(filters = {}) {
+        const params = new URLSearchParams();
+        if (filters.status) params.set('status', filters.status);
+        if (filters.campaign_id) params.set('campaign_id', filters.campaign_id);
+        if (filters.limit) params.set('limit', String(filters.limit));
+        if (filters.offset) params.set('offset', String(filters.offset));
+        const res = await fetch(`${BASE_URL}/admin/outbox/entries?${params}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /admin/outbox/entries/:id — Détail d'un envoi de la file [admin]
+     * La ligne est relue à l'ouverture : son statut peut avoir changé depuis la liste.
+     * @param {string} outboxId
+     * @returns {Promise<Object>}
+     */
+    async getAdminOutboxEntry(outboxId) {
+        const res = await fetch(`${BASE_URL}/admin/outbox/entries/${encodeURIComponent(outboxId)}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /** GET /admin/stats — Statistiques de plateforme [admin] */
+    async getAdminStats() {
+        const res = await fetch(`${BASE_URL}/admin/stats`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
+    /**
      * GET /admin/settings — Réglages de plateforme (MNO-15)
      * Chaque entrée porte sa clé, son libellé, son type et sa valeur.
      * @returns {Promise<{settings: Array<{key, label, kind, hint, value}>}>}
@@ -866,6 +1113,31 @@ export const api = {
         });
         const data = await handleResponse(res);
         return data?.count ?? data?.unread_count ?? 0;
+    },
+
+    /**
+     * GET /notifications/preferences — Catégories de notification et leur état [auth]
+     * @returns {Promise<{ categories: Array<{slug, label, description, enabled}> }>}
+     */
+    async getNotificationPreferences() {
+        const res = await fetch(`${BASE_URL}/notifications/preferences`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * PATCH /notifications/preferences — Enregistre un ou plusieurs choix de catégorie [auth]
+     * @param {Record<string, boolean>} categories — slug → activé
+     * @returns {Promise<{ categories: Array<{slug, label, description, enabled}> }>}
+     */
+    async updateNotificationPreferences(categories) {
+        const res = await fetch(`${BASE_URL}/notifications/preferences`, {
+            method: 'PATCH',
+            headers: buildHeaders(),
+            body: JSON.stringify({ categories }),
+        });
+        return handleResponse(res);
     },
 
     // ── Upload S3 ───────────────────────────────────────────────

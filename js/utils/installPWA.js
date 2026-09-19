@@ -112,11 +112,18 @@ export async function triggerInstall() {
 
 function iosStepsHtml() {
     return `
-        <ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px;">
-            <li>Appuyez sur <strong>Partager</strong> en bas de Safari.</li>
-            <li>Choisissez <strong>Sur l'écran d'accueil</strong>.</li>
-            <li>Validez avec <strong>Ajouter</strong>.</li>
+        <ol style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px;">
+            <li>Dans <strong>Safari</strong>, touchez <strong>Partager</strong> (le carré avec une flèche vers le haut), accessible aussi depuis le menu du navigateur.</li>
+            <li>Faites glisser le panneau de partage <strong>vers le haut</strong>, puis faites défiler les actions sous <strong>Copier</strong>.</li>
+            <li>Touchez <strong>Sur l'écran d'accueil</strong>.</li>
+            <li>Si l'option <strong>Ouvrir comme app web</strong> est proposée, activez-la, puis touchez <strong>Ajouter</strong>.</li>
+            <li>Lancez Dystrax depuis sa nouvelle icône sur l'écran d'accueil.</li>
         </ol>
+        <details>
+            <summary style="cursor: pointer; font-weight: 600;">L'option « Sur l'écran d'accueil » n'apparaît pas ?</summary>
+            <p style="margin: 8px 0 0;">Tout en bas de la liste, touchez <strong>Modifier les actions</strong> et ajoutez <strong>Sur l'écran d'accueil</strong>.</p>
+            <p style="margin: 8px 0 0;">Si vous avez ouvert Dystrax depuis une autre application, copiez le lien, ouvrez-le dans <strong>Safari</strong>, puis reprenez ces étapes.</p>
+        </details>
     `;
 }
 
@@ -148,6 +155,8 @@ export function offerInstallBanner(message, options = {}) {
         'padding: 14px 16px', 'box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18)',
         'z-index: 9998', 'display: flex', 'flex-direction: column', 'gap: 10px',
         'font-size: 14px', 'line-height: 1.4',
+        'box-sizing: border-box', 'max-height: calc(100vh - 108px)',
+        'max-height: calc(100dvh - 108px)', 'overflow-y: auto',
     ].join(';');
     banner.innerHTML = `
         <div style="display: flex; gap: 8px; align-items: flex-start;">

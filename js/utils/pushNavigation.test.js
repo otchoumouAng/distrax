@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
     extractPushData,
+    getNotificationAction,
     getNotificationFocus,
     isParticipantRequestNotification,
     isValidDesireId,
+    resolveNotificationAction,
     resolvePushTarget,
 } from './pushNavigation.js';
 
@@ -51,6 +53,20 @@ describe('extractPushData', () => {
             data: { type: 'join_request', desire_id: DESIRE_ID, event_id: DESIRE_ID },
         }).notification_id).toBe(DESIRE_ID);
     });
+
+    it('expose l’appel à l’action du catalogue (CDC §11)', () => {
+        expect(extractPushData({
+            data: {
+                type: 'join_request',
+                desire_id: DESIRE_ID,
+                action_label: 'Voir et répondre',
+                action_target: 'participant-requests',
+            },
+        })).toMatchObject({
+            action_label: 'Voir et répondre',
+            action_target: 'participant-requests',
+        });
+    });
 });
 
 describe('resolvePushTarget', () => {
@@ -91,6 +107,21 @@ describe('resolvePushTarget', () => {
         const untrackable = resolvePushTarget({ desire_id: DESIRE_ID }, ORIGIN);
         expect(untrackable.notificationId).toBe('');
     });
+
+    it('transporte l’étape d’action choisie jusqu’à l’application', () => {
+        expect(resolvePushTarget({
+            data: { desire_id: DESIRE_ID, action_target: 'confirm-presence' },
+        }, ORIGIN).actionTarget).toBe('confirm-presence');
+
+        expect(resolvePushTarget({
+            data: {
+                url: `${ORIGIN}/#desire/${DESIRE_ID}`,
+                action_target: 'practical-info',
+            },
+        }, ORIGIN).actionTarget).toBe('practical-info');
+
+        expect(resolvePushTarget({ desire_id: 'incorrect' }, ORIGIN).actionTarget).toBe('');
+    });
 });
 
 describe('push notification helpers', () => {
@@ -119,5 +150,51 @@ describe('push notification helpers', () => {
         expect(getNotificationFocus('new_desire')).toBeNull();
         expect(getNotificationFocus('type_inconnu')).toBeNull();
         expect(getNotificationFocus(undefined)).toBeNull();
+    });
+});
+
+describe('appel à l’action unique (CDC §11)', () => {
+    it('associe chaque type connu à son libellé et son étape', () => {
+        expect(getNotificationAction('join_request')).toEqual({
+            label: 'Voir et répondre',
+            target: 'participant-requests',
+        });
+        expect(getNotificationAction('join_accepted')).toEqual({
+            label: 'Confirmer ma présence',
+            target: 'confirm-presence',
+        });
+        expect(getNotificationAction('new_desire')).toEqual({ label: 'Découvrir', target: '' });
+    });
+
+    it('ne propose aucune action pour un type inconnu', () => {
+        expect(getNotificationAction('type_inconnu')).toBeNull();
+        expect(getNotificationAction(undefined)).toBeNull();
+    });
+
+    it('privilégie l’action portée par l’API sur la table de repli', () => {
+        expect(resolveNotificationAction({
+            type: 'join_request',
+            action_label: 'Répondre maintenant',
+            action_target: 'confirm-presence',
+        })).toEqual({ label: 'Répondre maintenant', target: 'confirm-presence' });
+    });
+
+    it('accepte les clés camelCase des payloads FCM', () => {
+        expect(resolveNotificationAction({
+            actionLabel: 'Voir la modification',
+            actionTarget: 'practical-info',
+        })).toEqual({ label: 'Voir la modification', target: 'practical-info' });
+    });
+
+    it('retombe sur la table locale quand l’API ne fournit pas d’action', () => {
+        expect(resolveNotificationAction({ type: 'reminder_soon' })).toEqual({
+            label: "Voir l'itinéraire",
+            target: 'practical-info',
+        });
+        expect(resolveNotificationAction('new_desire')).toEqual({ label: 'Découvrir', target: '' });
+    });
+
+    it('retourne null lorsque aucune action n’est connue', () => {
+        expect(resolveNotificationAction({ type: 'type_inconnu' })).toBeNull();
     });
 });

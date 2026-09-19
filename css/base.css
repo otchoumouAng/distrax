@@ -276,8 +276,10 @@ html.smooth-scroll {
     margin: 0;
 }
 
-/* Afficher uniquement sur desktop (> 768px) */
-@media (min-width: 769px) {
+/* La largeur seule peut dépasser 768px sur un téléphone en paysage ou en
+   version pour ordinateur. Réserver le blocage aux pointeurs de type souris.
+   Garder cette condition synchronisée avec le QR code dans index.html. */
+@media (min-width: 769px) and (hover: hover) and (pointer: fine) {
     #desktop-only-wall {
         display: flex;
     }

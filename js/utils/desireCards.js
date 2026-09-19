@@ -1,5 +1,6 @@
 import { DEFAULT_AVATAR_PATH } from './escapeHtml.js';
 import { formatSpotsLabel } from './formatSpots.js';
+import { parseLikeCount } from './desireLikes.js';
 
 const THEME_BY_CATEGORY = {
     sport: 'sport',
@@ -71,6 +72,8 @@ export function buildDesireViewDetail(desire) {
         price_type: desire?.price_type,
         category: desire?.category || '',
         categoryIcon: desire?.category_icon || desire?.category || 'label',
+        likeCount: desire?.like_count ?? 0,
+        likedByMe: desire?.liked_by_me === true,
     };
 }
 
@@ -120,6 +123,12 @@ export function createDesireCard(desire, options = {}) {
 
     if (desire?.view_count != null) {
         card.setAttribute('view-count', String(desire.view_count));
+    }
+
+    // Like ♥ : compteur et état « aimé par moi » (attribut booléen).
+    card.setAttribute('like-count', String(parseLikeCount(desire?.like_count)));
+    if (desire?.liked_by_me) {
+        card.setAttribute('liked', '');
     }
 
     if (desire?.is_boosted) {

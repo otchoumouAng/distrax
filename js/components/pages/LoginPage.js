@@ -1,4 +1,5 @@
 import { initializeGoogleAuth, renderGoogleButton, setActiveGoogleAuthScope } from '../../utils/googleAuth.js';
+import { identifierError } from '../../utils/identifier.js';
 
 export class LoginPage extends HTMLElement {
     constructor() {
@@ -40,10 +41,10 @@ export class LoginPage extends HTMLElement {
 
                     <form id="authForm" style="display: flex; flex-direction: column; gap: 16px;">
                         <div class="form-group">
-                            <label class="form-label">Numéro de téléphone</label>
+                            <label class="form-label">Téléphone ou email</label>
                             <div style="position: relative;">
-                                <i class="material-icons-round" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-light);">phone</i>
-                                <input type="tel" id="phoneInput" class="form-input" placeholder="Ex: +2250102030405" style="padding-left: 48px;" required>
+                                <i class="material-icons-round" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-light);">person</i>
+                                <input type="text" id="phoneInput" class="form-input" placeholder="Téléphone ou email" autocomplete="username" style="padding-left: 48px;" required>
                             </div>
                         </div>
 
@@ -118,15 +119,21 @@ export class LoginPage extends HTMLElement {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btn = form.querySelector('button[type="submit"]');
-                const phone = this.querySelector('#phoneInput').value.trim();
+                const identifier = this.querySelector('#phoneInput').value.trim();
                 const password = this.querySelector('#passwordInput').value;
+
+                const error = identifierError(identifier);
+                if (error) {
+                    window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: error, type: 'error' } }));
+                    return;
+                }
 
                 btn.disabled = true;
                 btn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite;">autorenew</i> Connexion...';
 
                 try {
                     const { api } = await import('../../api.js');
-                    await api.login(phone, password);
+                    await api.login(identifier, password);
 
                     btn.style.background = '#10b981';
                     btn.innerHTML = '<i class="material-icons-round">check</i> Succès';

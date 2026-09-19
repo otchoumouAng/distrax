@@ -2,7 +2,7 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging';
 import { api } from '../api.js';
-import { extractPushData } from './pushNavigation.js';
+import { extractPushData, resolveNotificationAction } from './pushNavigation.js';
 import { escapeHtml } from './escapeHtml.js';
 import { isIOS, isStandalone } from './installPWA.js';
 
@@ -56,13 +56,18 @@ function registerForegroundListener() {
 
     onMessage(messaging, (payload) => {
         const data = extractPushData(payload);
+        // Le toast reprend le libellé d'action du catalogue (CDC §11) au lieu
+        // d'un « Voir » générique : le clic ouvre la même étape que la
+        // notification, sans jamais exécuter l'action lui-même.
+        const action = resolveNotificationAction(data);
+        const hasDestination = Boolean(data.desire_id || data.url);
 
         window.dispatchEvent(new CustomEvent('show-toast', {
             detail: {
                 message: data.body || 'Nouvelle notification',
                 type: 'info',
-                actionLabel: data.desire_id || data.url ? 'Voir' : '',
-                actionEvent: data.desire_id || data.url ? 'open-push-destination' : '',
+                actionLabel: action && hasDestination ? action.label : '',
+                actionEvent: action && hasDestination ? 'open-push-destination' : '',
                 actionDetail: payload,
             },
         }));

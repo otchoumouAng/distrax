@@ -134,6 +134,8 @@ export class FilterModal extends HTMLElement {
 
         this.overlay = this.querySelector('.filter-modal-overlay');
         this.content = this.querySelector('.filter-modal-content');
+        // Code pays ayant servi à peupler la liste des communes (VIS-04).
+        this._communesCountryCode = null;
 
         this.setupListeners();
     }
@@ -168,6 +170,14 @@ export class FilterModal extends HTMLElement {
         // Écouter l'ouverture des filtres depuis l'extérieur
         document.addEventListener('open-filters', () => this.open());
         document.addEventListener('filters-cleared', () => this.reset());
+
+        // Changement de pays : les communes du pays précédent sont incohérentes,
+        // on réinitialise les filtres et on recharge la liste du nouveau pays (VIS-04).
+        document.addEventListener('country-context-changed', () => {
+            this.reset();
+            this._communesCountryCode = null;
+            this._loadCommunes(true);
+        });
 
         // Setup category dropdown
         const catTrigger = this.querySelector('#filterCategoryTrigger');
@@ -269,21 +279,46 @@ export class FilterModal extends HTMLElement {
         }));
     }
 
-    async _loadCommunes() {
+    /**
+     * Peuple la liste des communes avec les villes du pays effectif (VIS-04).
+     * @param {boolean} [force] - Recharge même si la liste correspond déjà au pays
+     */
+    async _loadCommunes(force = false) {
         const select = this.querySelector('#filterCommuneSelect');
-        if (!select || select.options.length > 1) return;
+        if (!select) return;
+        let api;
         try {
-            const { api } = await import('../../api.js');
-            const communes = await api.getCommunes();
-            if (Array.isArray(communes) && communes.length > 0) {
-                select.innerHTML = '<option value="">Toutes les communes</option>';
-                communes.forEach(c => {
+            ({ api } = await import('../../api.js'));
+        } catch (e) {
+            console.warn('[FilterModal] API indisponible:', e.message);
+            return;
+        }
+
+        const countryCode = api.getCountryCode();
+        // Déjà peuplé pour ce pays : rien à faire.
+        if (!force && this._communesCountryCode === countryCode && select.options.length > 1) return;
+
+        select.innerHTML = '<option value="">Toutes les communes</option>';
+        if (!countryCode) {
+            this._communesCountryCode = null;
+            return;
+        }
+
+        try {
+            const cities = await api.getCities(countryCode);
+            // Le pays a changé pendant le chargement : la réponse est obsolète (VIS-11).
+            if (api.getCountryCode() !== countryCode) return;
+            if (Array.isArray(cities) && cities.length > 0) {
+                cities.forEach(c => {
+                    const label = c.label || c.name || c.slug || '';
+                    if (!label) return;
                     const opt = document.createElement('option');
-                    opt.value = c;
-                    opt.textContent = c;
+                    opt.value = label;
+                    opt.textContent = label;
                     select.appendChild(opt);
                 });
             }
+            this._communesCountryCode = countryCode;
         } catch (e) {
             console.warn('[FilterModal] Communes non chargées:', e.message);
         }

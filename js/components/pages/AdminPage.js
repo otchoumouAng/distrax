@@ -1,13 +1,14 @@
 /**
  * AdminPage — Console d'administration du moteur de notifications (MNO-12).
  *
- * Sept écrans dans une seule page, dans l'ordre où l'exploitation les
+ * Huit écrans dans une seule page, dans l'ordre où l'exploitation les
  * consulte : l'état de la file d'envoi, les interrupteurs du moteur et la
  * fenêtre d'envoi paramétrable (MNO-15), le mode de gratuité du ciblage, le
  * catalogue des référentiels (MNO-17), les campagnes de notification (MNO-18),
- * la liste filtrée des comptes (MNO-19) avec leur blocage (MNO-19a), puis la
- * recherche d'un compte — avec, pour ce dernier, son journal de livraison
- * (MNO-12b), son diagnostic (MNO-13) et un envoi de test (MNO-12c).
+ * la liste filtrée des comptes (MNO-19) avec leur blocage (MNO-19a),
+ * l'engagement (statistiques de ♥), puis la recherche d'un compte — avec, pour
+ * ce dernier, son journal de livraison (MNO-12b), son diagnostic (MNO-13) et
+ * un envoi de test (MNO-12c).
  *
  * La page n'est qu'un confort : toutes les routes qu'elle appelle répondent 403
  * à un compte non habilité. La garde locale évite d'afficher un écran vide.
@@ -28,10 +29,22 @@ const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 const OUTBOX_STATUS_LABELS = {
     pending: 'En attente',
+    sending: 'En cours',
     sent: 'Envoyés',
     failed: 'Échoués',
     skipped: 'Abandonnés',
 };
+
+const OUTBOX_STATUS_COLORS = {
+    pending: '#f59e0b',
+    sending: '#3b82f6',
+    sent: '#10b981',
+    failed: '#ef4444',
+    skipped: 'var(--text-muted)',
+};
+
+/** Nombre d'envois individuels rendus dans la section : une tranche récente. */
+const OUTBOX_PAGE_SIZE = 20;
 
 const DELIVERY_STATUS_LABELS = {
     attempted: 'Tenté',
@@ -56,6 +69,7 @@ const REASON_LABELS = {
     daily_cap: 'Reporté au lendemain (plafond atteint)',
     no_device: 'Aucun appareil joignable',
     provider_failure: 'Échec du prestataire',
+    delivery_unknown: 'Livraison incertaine (non renvoyée)',
 };
 
 /** États d'une campagne, tels que le modèle les écrit (MNO-18c). */
@@ -93,6 +107,13 @@ const AUDIENCE_HINTS = {
 
 const CHANNEL_LABELS = { push: 'Notification push' };
 
+/** Étapes de l'application qu'un CTA de campagne peut ouvrir (valeurs du back). */
+const ACTION_TARGET_LABELS = {
+    'participant-requests': 'Demandes de participation',
+    'confirm-presence': 'Confirmation de présence',
+    'practical-info': 'Informations pratiques',
+};
+
 /**
  * L'accueil de la console présente une tuile par section ; une seule section
  * est dépliée à la fois. Le libellé sert aussi de titre au header.
@@ -127,6 +148,12 @@ const ADMIN_SECTIONS = [
         icon: 'group',
         label: 'Utilisateurs',
         hint: 'Comptes, appareils, blocage et inspection.',
+    },
+    {
+        key: 'engagement',
+        icon: 'favorite',
+        label: 'Engagement',
+        hint: 'Envies publiées, cœurs reçus et top des envies aimées.',
     },
 ];
 
@@ -166,7 +193,7 @@ export class AdminPage extends HTMLElement {
         this._searchResults = [];
         this._catalogs = [];
         this._catalogKey = null;
-        this._campaignOptions = { channels: [], audience_modes: [] };
+        this._campaignOptions = { channels: [], audience_modes: [], action_targets: [] };
         this._campaignAudience = 'all';
         this._campaignPicked = new Map();
         this._campaignResults = [];
@@ -206,10 +233,15 @@ export class AdminPage extends HTMLElement {
                         <p class="admin-card-hint">
                             Envois proactifs par statut. Une accumulation en attente ou en
                             échec signale un moteur arrêté ou un prestataire indisponible.
+                            Touchez un envoi pour voir sa fiche et le bouton natif qu’il affichera.
                         </p>
                         <div class="admin-chips" id="adminOutboxCounts">
                             <span class="admin-placeholder">Chargement…</span>
                         </div>
+                        <div id="adminOutboxEntries">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                        <div id="adminOutboxDetail"></div>
                     </div>
 
                     <!-- Interrupteurs du moteur -->
@@ -273,6 +305,30 @@ export class AdminPage extends HTMLElement {
                                    maxlength="200" placeholder="Titre du message" autocomplete="off">
                             <textarea class="form-input admin-campaign-body" id="adminCampaignBody"
                                       maxlength="2000" rows="3" placeholder="Message"></textarea>
+
+                            <div class="admin-setting-row">
+                                <label class="admin-setting-text" for="adminCampaignActionTarget">
+                                    <span class="admin-setting-label">Appel à l’action</span>
+                                    <span class="admin-setting-hint">
+                                        Bouton natif du push. Facultatif : sans étape, la
+                                        notification ouvre simplement l’application.
+                                    </span>
+                                </label>
+                                <select class="form-input admin-setting-input"
+                                        id="adminCampaignActionTarget"></select>
+                            </div>
+
+                            <div class="admin-setting-row" id="adminCampaignActionLabelRow" hidden>
+                                <label class="admin-setting-text" for="adminCampaignActionLabel">
+                                    <span class="admin-setting-label">Libellé du bouton</span>
+                                    <span class="admin-setting-hint">
+                                        Ce que l’ouverture permettra de faire.
+                                    </span>
+                                </label>
+                                <input class="form-input admin-setting-input" id="adminCampaignActionLabel"
+                                       type="text" maxlength="60" placeholder="Ex. Voir les détails"
+                                       autocomplete="off">
+                            </div>
 
                             <div class="admin-setting-row">
                                 <label class="admin-setting-text" for="adminCampaignChannel">
@@ -392,6 +448,24 @@ export class AdminPage extends HTMLElement {
                         <div id="adminUserPanel"></div>
                     </div>
 
+                    <!-- Engagement : statistiques de likes -->
+                    <div class="admin-card" data-admin-section="engagement" hidden>
+                        <h3 class="admin-card-title">
+                            <i class="material-icons-round">favorite</i> Engagement
+                        </h3>
+                        <p class="admin-card-hint">
+                            Envies publiées et cœurs reçus sur toute la plateforme,
+                            avec ce qui a été aimé ces sept derniers jours.
+                        </p>
+                        <div class="admin-chips" id="adminEngagementCounts">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                        <h4 class="admin-section-title">Top 5 des envies aimées</h4>
+                        <div id="adminEngagementTop">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                    </div>
+
                     <div style="height: 40px;"></div>
                 </div>
             </section>
@@ -428,6 +502,8 @@ export class AdminPage extends HTMLElement {
         });
         this.querySelector('#adminCampaignPreview')
             ?.addEventListener('click', () => this._previewCampaign());
+        this.querySelector('#adminCampaignActionTarget')
+            ?.addEventListener('change', () => this._toggleCampaignActionLabel());
         this.querySelector('#adminCampaignSearchBtn')
             ?.addEventListener('click', () => this._searchCampaignUsers());
         this.querySelector('#adminCampaignSearchInput')?.addEventListener('keydown', (event) => {
@@ -563,6 +639,8 @@ export class AdminPage extends HTMLElement {
                 return this._loadCampaigns(this._takePrefetch('campaigns'));
             case 'users':
                 return this._loadUserDirectory(this._takePrefetch('users'));
+            case 'engagement':
+                return this._loadEngagement(this._takePrefetch('engagement'));
             default:
                 return undefined;
         }
@@ -588,12 +666,13 @@ export class AdminPage extends HTMLElement {
      */
     async _loadSummaries() {
         this._summary = {};
-        const [outbox, features, catalogs, campaigns, users] = await Promise.all([
+        const [outbox, features, catalogs, campaigns, users, engagement] = await Promise.all([
             this._grab('outbox', () => api.getAdminOutbox()),
             this._grab('engine', () => api.getFeatures('notification')),
             this._grab('catalog', () => api.getAdminCatalog()),
             this._grab('campaigns', () => api.getAdminCampaigns()),
             this._grab('users', () => api.getAdminUsersDirectory({ page: 1 })),
+            this._grab('engagement', () => api.getAdminStats()),
         ]);
 
         const counts = outbox?.counts || {};
@@ -629,6 +708,10 @@ export class AdminPage extends HTMLElement {
 
         this._setTileMetric('users', users
             ? `${formatCount(users.total ?? users.users?.length ?? 0)} compte(s)`
+            : 'Indisponible');
+
+        this._setTileMetric('engagement', engagement
+            ? `${formatCount(engagement.likes_total)} ♥ · ${formatCount(engagement.likes_last_7d)} sur 7 jours`
             : 'Indisponible');
     }
 
@@ -671,24 +754,47 @@ export class AdminPage extends HTMLElement {
 
     // ─── File d'envoi ────────────────────────────────────────────────
 
-    async _loadOutbox() {
-        const container = this.querySelector('#adminOutboxCounts');
-        if (!container) return;
+    /**
+     * La file en deux temps : le vu-mètre par statut, puis les envois individuels
+     * en cartes cliquables. Chaque carte mène à la fiche du destinataire et au
+     * bouton natif que son appareil affichera.
+     */
+    async _loadOutbox(prefetched = null) {
+        const countsContainer = this.querySelector('#adminOutboxCounts');
+        const listContainer = this.querySelector('#adminOutboxEntries');
+        const detail = this.querySelector('#adminOutboxDetail');
+        if (!countsContainer) return;
+        if (detail) detail.innerHTML = '';
+
+        // Le résumé des tuiles porte déjà les compteurs : la première ouverture
+        // n'a alors qu'une requête à faire, celle des cartes.
         try {
-            const data = await api.getAdminOutbox();
-            const counts = data?.counts || {};
-            const order = ['pending', 'sent', 'failed', 'skipped'];
-            const known = order
-                .map((status) => this._chip(status, counts[status] || 0))
-                .join('');
-            const extra = Object.keys(counts)
-                .filter((status) => !order.includes(status))
-                .map((status) => this._chip(status, counts[status]))
-                .join('');
-            container.innerHTML = known + extra || '<span class="admin-placeholder">File vide</span>';
+            const state = prefetched || await api.getAdminOutbox();
+            countsContainer.innerHTML = this._outboxChips(state?.counts || {});
         } catch (err) {
-            container.innerHTML = this._error(err);
+            countsContainer.innerHTML = this._error(err);
         }
+
+        if (!listContainer) return;
+        listContainer.innerHTML = '<span class="admin-placeholder">Chargement…</span>';
+        try {
+            const page = await api.getAdminOutboxEntries({ limit: OUTBOX_PAGE_SIZE });
+            this._renderOutboxEntries(page);
+        } catch (err) {
+            listContainer.innerHTML = this._error(err);
+        }
+    }
+
+    _outboxChips(counts) {
+        const order = ['pending', 'sending', 'sent', 'failed', 'skipped'];
+        const known = order
+            .map((status) => this._chip(status, counts[status] || 0))
+            .join('');
+        const extra = Object.keys(counts)
+            .filter((status) => !order.includes(status))
+            .map((status) => this._chip(status, counts[status]))
+            .join('');
+        return known + extra || '<span class="admin-placeholder">File vide</span>';
     }
 
     _chip(status, total) {
@@ -699,6 +805,162 @@ export class AdminPage extends HTMLElement {
                 <span>${escapeHtml(label)}</span>
             </span>
         `;
+    }
+
+    /** Une carte par envoi, la plus récente d'abord, cliquable vers sa fiche. */
+    _renderOutboxEntries(page) {
+        const container = this.querySelector('#adminOutboxEntries');
+        if (!container) return;
+        const entries = page?.entries || [];
+        if (!entries.length) {
+            container.innerHTML = this._message('Aucun envoi dans la file.');
+            return;
+        }
+        const total = Number(page?.total || entries.length);
+        container.innerHTML = `
+            <h4 class="admin-section-title">
+                Envois individuels (${formatCount(entries.length)} sur ${formatCount(total)})
+            </h4>
+            ${entries.map((entry) => this._outboxCard(entry)).join('')}
+        `;
+        container.querySelectorAll('.admin-outbox-card').forEach((card) => {
+            card.addEventListener('click', () => this._openOutboxEntry(card.dataset.outboxId));
+        });
+    }
+
+    /** Une carte d'envoi : sa cible, son état, son échéance et son CTA éventuel. */
+    _outboxCard(entry) {
+        const color = OUTBOX_STATUS_COLORS[entry.status] || 'var(--text-muted)';
+        const label = OUTBOX_STATUS_LABELS[entry.status] || entry.status || '—';
+        return `
+            <button type="button" class="admin-outbox-card"
+                    data-outbox-id="${escapeHtml(String(entry.id))}">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(entry.title || entry.event_type || '—')}</span>
+                    <span class="admin-badge" style="color:${color};border-color:${color};">
+                        ${escapeHtml(label)}
+                    </span>
+                </div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(this._recipientLabel(entry))}
+                    · ${escapeHtml(entry.event_type || '—')}
+                    · ${escapeHtml(formatDateTime(entry.not_before || entry.created_at))}
+                </div>
+                ${entry.action_label ? `
+                    <div class="admin-journal-meta">
+                        Bouton : ${escapeHtml(entry.action_label)}
+                        → ${escapeHtml(ACTION_TARGET_LABELS[entry.action_target] || entry.action_target || '—')}
+                    </div>
+                ` : ''}
+            </button>
+        `;
+    }
+
+    _recipientLabel(entry) {
+        return entry.recipient_pseudo || entry.recipient_phone || 'Destinataire inconnu';
+    }
+
+    /** La fiche d'un envoi, relue à l'ouverture : le statut peut avoir changé. */
+    async _openOutboxEntry(outboxId) {
+        const panel = this.querySelector('#adminOutboxDetail');
+        if (!panel) return;
+        this.querySelectorAll('.admin-outbox-card').forEach((card) => {
+            card.classList.toggle('is-selected', card.dataset.outboxId === String(outboxId));
+        });
+        panel.innerHTML = '<span class="admin-placeholder">Chargement de la fiche…</span>';
+        try {
+            this._renderOutboxDetail(await api.getAdminOutboxEntry(outboxId));
+        } catch (err) {
+            panel.innerHTML = this._error(err);
+        }
+    }
+
+    /** Le détail d'un envoi, avec le bouton natif réellement affiché sur l'appareil. */
+    _renderOutboxDetail(entry) {
+        const panel = this.querySelector('#adminOutboxDetail');
+        if (!panel) return;
+        const color = OUTBOX_STATUS_COLORS[entry.status] || 'var(--text-muted)';
+        const label = OUTBOX_STATUS_LABELS[entry.status] || entry.status || '—';
+        const target = ACTION_TARGET_LABELS[entry.action_target] || entry.action_target;
+
+        panel.innerHTML = `
+            <div class="admin-user-head">
+                <div>
+                    <strong>${escapeHtml(entry.title || '—')}</strong>
+                    <small>${escapeHtml(entry.event_type || '—')} · ${escapeHtml(entry.category || '—')}</small>
+                </div>
+                <span class="admin-badge" style="color:${color};border-color:${color};">
+                    ${escapeHtml(label)}
+                </span>
+            </div>
+            <p class="admin-campaign-message">${escapeHtml(entry.body || '')}</p>
+            <dl class="admin-facts">
+                <div><dt>Destinataire</dt><dd>${escapeHtml(this._recipientLabel(entry))}</dd></div>
+                <div><dt>Tentatives</dt><dd>${escapeHtml(String(entry.attempts ?? 0))}</dd></div>
+                <div><dt>Prévu</dt><dd>${escapeHtml(formatDateTime(entry.not_before))}</dd></div>
+                <div><dt>Envoyé</dt><dd>${entry.sent_at ? escapeHtml(formatDateTime(entry.sent_at)) : '—'}</dd></div>
+                <div><dt>Campagne</dt><dd>${entry.campaign_id ? escapeHtml(String(entry.campaign_id)) : '—'}</dd></div>
+                <div><dt>Bouton natif</dt><dd>${entry.action_label
+                    ? `${escapeHtml(entry.action_label)} → ${escapeHtml(target || '—')}`
+                    : 'Aucun'}</dd></div>
+            </dl>
+            ${entry.last_reason
+                ? `<div class="admin-journal-error">${escapeHtml(reasonLabel(entry.last_reason))}</div>` : ''}
+        `;
+    }
+
+    // ─── Engagement : statistiques de ♥ ──────────────────────────────
+
+    async _loadEngagement(prefetched = null) {
+        const counts = this.querySelector('#adminEngagementCounts');
+        const top = this.querySelector('#adminEngagementTop');
+        if (!counts) return;
+        try {
+            const data = prefetched || await api.getAdminStats();
+            this._renderEngagement(data);
+        } catch (err) {
+            counts.innerHTML = this._error(err);
+            if (top) top.innerHTML = '';
+        }
+    }
+
+    /** Trois compteurs, puis le classement des envies qui ont le plus de cœurs. */
+    _renderEngagement(data) {
+        const counts = this.querySelector('#adminEngagementCounts');
+        const top = this.querySelector('#adminEngagementTop');
+        if (!counts || !top) return;
+
+        counts.innerHTML = `
+            <span class="admin-chip">
+                <b>${formatCount(data?.desires_total)}</b>
+                <span>Envies publiées</span>
+            </span>
+            <span class="admin-chip">
+                <b>${formatCount(data?.likes_total)}</b>
+                <span>Cœurs reçus</span>
+            </span>
+            <span class="admin-chip">
+                <b>${formatCount(data?.likes_last_7d)}</b>
+                <span>Sur 7 jours</span>
+            </span>
+        `;
+
+        const ranked = data?.top_liked || [];
+        if (!ranked.length) {
+            top.innerHTML = this._message('Aucune envie aimée pour l’instant.');
+            return;
+        }
+        top.innerHTML = ranked.map((row, index) => `
+            <div class="admin-journal-row">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">
+                        ${escapeHtml(`${index + 1}. ${row.title || '—'}`)}
+                    </span>
+                    <span class="admin-badge">${escapeHtml(String(row.like_count ?? 0))} ♥</span>
+                </div>
+                <div class="admin-journal-meta">${escapeHtml(String(row.desire_id || ''))}</div>
+            </div>
+        `).join('');
     }
 
     // ─── Interrupteurs ───────────────────────────────────────────────
@@ -1102,8 +1364,9 @@ export class AdminPage extends HTMLElement {
         if (!list) return;
         try {
             const data = prefetched || await api.getAdminCampaigns();
-            this._campaignOptions = data?.options || { channels: [], audience_modes: [] };
+            this._campaignOptions = data?.options || { channels: [], audience_modes: [], action_targets: [] };
             this._renderCampaignChannels();
+            this._renderCampaignActionTargets();
             this._renderCampaignAudience();
             this._renderCampaignPicked();
             this._renderCampaignList(data?.campaigns || []);
@@ -1122,6 +1385,30 @@ export class AdminPage extends HTMLElement {
             <option value="${escapeHtml(channel)}">${escapeHtml(CHANNEL_LABELS[channel] || channel)}</option>
         `).join('');
         if (previous && channels.includes(previous)) select.value = previous;
+    }
+
+    /** Les étapes du CTA viennent du registre ; « Aucun » ouvre la campagne sans bouton. */
+    _renderCampaignActionTargets() {
+        const select = this.querySelector('#adminCampaignActionTarget');
+        if (!select) return;
+        const targets = this._campaignOptions.action_targets || [];
+        const previous = select.value;
+        select.innerHTML = [
+            '<option value="">Aucun</option>',
+            ...targets.map((target) => `
+                <option value="${escapeHtml(target)}">${escapeHtml(ACTION_TARGET_LABELS[target] || target)}</option>
+            `),
+        ].join('');
+        if (previous && targets.includes(previous)) select.value = previous;
+        this._toggleCampaignActionLabel();
+    }
+
+    /** Le libellé n'a de sens qu'accompagné d'une étape à ouvrir. */
+    _toggleCampaignActionLabel() {
+        const target = this.querySelector('#adminCampaignActionTarget');
+        const row = this.querySelector('#adminCampaignActionLabelRow');
+        if (!row) return;
+        row.hidden = !(target?.value);
     }
 
     _renderCampaignAudience() {
@@ -1291,10 +1578,17 @@ export class AdminPage extends HTMLElement {
         const body = this.querySelector('#adminCampaignBody')?.value.trim() || '';
         const channel = this.querySelector('#adminCampaignChannel')?.value || '';
         const when = this.querySelector('#adminCampaignWhen')?.value || '';
+        const actionTarget = this.querySelector('#adminCampaignActionTarget')?.value || '';
+        const actionLabel = this.querySelector('#adminCampaignActionLabel')?.value.trim() || '';
         const audience = this._campaignAudiencePayload();
 
         if (!title || !body) {
             if (feedback) feedback.innerHTML = this._message('Un titre et un message sont nécessaires.', 'error');
+            return;
+        }
+        if (actionTarget && !actionLabel) {
+            if (feedback) feedback.innerHTML = this._message(
+                'Un libellé est nécessaire pour le bouton d’action.', 'error');
             return;
         }
         if (audience.audience_mode === 'selected' && !audience.user_ids.length) {
@@ -1314,6 +1608,8 @@ export class AdminPage extends HTMLElement {
                 audience_mode: audience.audience_mode,
                 user_ids: audience.user_ids,
                 scheduled_at: when ? new Date(when).toISOString() : null,
+                action_label: actionTarget ? actionLabel : null,
+                action_target: actionTarget || null,
             });
             if (feedback) feedback.innerHTML = this._message(this._campaignOutcome(campaign), 'ok');
             this._resetCampaignForm();
@@ -1339,11 +1635,16 @@ export class AdminPage extends HTMLElement {
         const title = this.querySelector('#adminCampaignTitle');
         const body = this.querySelector('#adminCampaignBody');
         const when = this.querySelector('#adminCampaignWhen');
+        const actionTarget = this.querySelector('#adminCampaignActionTarget');
+        const actionLabel = this.querySelector('#adminCampaignActionLabel');
         const input = this.querySelector('#adminCampaignSearchInput');
         const results = this.querySelector('#adminCampaignSearchResults');
         if (title) title.value = '';
         if (body) body.value = '';
         if (when) when.value = '';
+        if (actionTarget) actionTarget.value = '';
+        if (actionLabel) actionLabel.value = '';
+        this._toggleCampaignActionLabel();
         if (input) input.value = '';
         if (results) results.innerHTML = '';
         this._campaignPicked.clear();

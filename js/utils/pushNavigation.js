@@ -53,6 +53,18 @@ export function extractPushData(payload = {}) {
             fcmData.notification_id,
             fcmData.event_id,
         ),
+        action_label: firstNonEmptyString(
+            data.action_label,
+            data.actionLabel,
+            root.action_label,
+            fcmData.action_label,
+        ),
+        action_target: firstNonEmptyString(
+            data.action_target,
+            data.actionTarget,
+            root.action_target,
+            fcmData.action_target,
+        ),
         title: firstNonEmptyString(data.title, notification.title, fcmNotification.title),
         body: firstNonEmptyString(data.body, notification.body, fcmNotification.body),
     };
@@ -86,6 +98,7 @@ export function resolvePushTarget(payload, origin) {
                     type: data.type,
                     desireId: desireId || desireIdFromUrl(candidate),
                     notificationId,
+                    actionTarget: data.action_target,
                     url: candidate.href,
                 };
             }
@@ -100,6 +113,7 @@ export function resolvePushTarget(payload, origin) {
             type: data.type,
             desireId,
             notificationId,
+            actionTarget: data.action_target,
             url: new URL(`/#desire/${desireId}`, safeOrigin).href,
         };
     }
@@ -109,35 +123,67 @@ export function resolvePushTarget(payload, origin) {
         type: data.type,
         desireId: '',
         notificationId,
+        actionTarget: data.action_target,
         url: new URL('/', safeOrigin).href,
     };
 }
 
 /**
- * Action attendue après ouverture de l'envie, par type de notification.
- * Chaque entrée du catalogue éditorial (§12.2) est listée explicitement ;
- * une valeur null signifie « ouvrir l'envie sans cible de focalisation ».
+ * Appel à l'action unique de chaque événement (CDC §11, §12.1).
+ *
+ * `label` est le libellé du bouton, `target` l'étape à ouvrir dans
+ * l'application — jamais une action exécutée d'office. L'API porte ces valeurs
+ * (`action_label` / `action_target`) ; cette table n'est qu'un repli pour les
+ * notifications envoyées avant leur mise en place et pour les types émis
+ * uniquement côté client.
  */
-const NOTIFICATION_FOCUS = {
-    join_request: 'participant-requests',   // Nouvelle demande → répondre
-    join_accepted: 'confirm-presence',      // Acceptation → confirmer ma présence
-    join_rejected: null,                    // Refus → voir d'autres envies
-    presence_confirm: 'confirm-presence',   // Présence à confirmer → je confirme
-    organizer_keep: null,                   // Maintien organisateur
-    reminder_day: 'practical-info',         // Rappel veille → détails pratiques
-    reminder_soon: 'practical-info',        // Rappel imminent → lieu / itinéraire
-    desire_updated: 'practical-info',       // Modification → champs modifiés
-    desire_cancelled: null,                 // Annulation → état annulé
-    post_activity: null,                    // Après activité → retour
-    republish: null,                        // Republication → reprogrammer
-    recommendation: null,                   // Recommandation → découvrir
-    new_desire: null,                       // Nouvelle envie
+const NOTIFICATION_ACTIONS = {
+    join_request: { label: 'Voir et répondre', target: 'participant-requests' },
+    join_accepted: { label: 'Confirmer ma présence', target: 'confirm-presence' },
+    join_rejected: { label: "Voir d'autres envies", target: '' },
+    presence_confirm: { label: 'Je confirme', target: 'confirm-presence' },
+    organizer_keep: { label: "Maintenir l'activité", target: '' },
+    reminder_day: { label: 'Voir les détails', target: 'practical-info' },
+    reminder_soon: { label: "Voir l'itinéraire", target: 'practical-info' },
+    desire_updated: { label: 'Voir la modification', target: 'practical-info' },
+    desire_cancelled: { label: "Voir d'autres envies", target: '' },
+    post_activity: { label: 'Donner mon retour', target: '' },
+    republish: { label: 'Reprogrammer', target: '' },
+    recommendation: { label: 'Découvrir', target: '' },
+    new_desire: { label: 'Découvrir', target: '' },
 };
 
-/** Retourne la cible de focalisation associée à un type, ou null. */
-export function getNotificationFocus(type) {
+/** Retourne l'action portée par un type de notification, ou null. */
+export function getNotificationAction(type) {
     const key = typeof type === 'string' ? type.trim() : '';
-    return NOTIFICATION_FOCUS[key] || null;
+    return NOTIFICATION_ACTIONS[key] || null;
+}
+
+/**
+ * Action à proposer pour une notification, un push ou un type.
+ *
+ * L'API est la source de vérité (`action_label` / `action_target`) ; la table
+ * locale ne sert que de repli. Retourne null lorsqu'aucune action n'est
+ * connue, afin que chaque surface puisse simplement ne rien afficher.
+ */
+export function resolveNotificationAction(source = {}) {
+    if (typeof source === 'string') return getNotificationAction(source);
+
+    const value = asObject(source);
+    const label = firstNonEmptyString(value.action_label, value.actionLabel);
+    if (label) {
+        return { label, target: firstNonEmptyString(value.action_target, value.actionTarget) };
+    }
+    return getNotificationAction(value.type);
+}
+
+/**
+ * Étape à ouvrir après l'ouverture de l'envie, par type de notification.
+ * Une valeur null signifie « ouvrir l'envie sans étape à mettre en avant ».
+ */
+export function getNotificationFocus(type) {
+    const action = getNotificationAction(type);
+    return (action && action.target) || null;
 }
 
 export function isParticipantRequestNotification(type) {

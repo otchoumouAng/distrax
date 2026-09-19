@@ -124,6 +124,26 @@ describe('navigation vers une envie liée', () => {
     it('ne crée pas de destination lorsque la notification n’est liée à aucune envie', () => {
         expect(getNotificationNavigation({ type: 'information' })).toBeNull();
     });
+
+    it('privilégie l’étape transmise par l’API sur la table locale (CDC §11)', () => {
+        expect(getNotificationNavigation({
+            type: 'join_rejected',
+            related_desire_id: 'desire-42',
+            action_label: 'Répondre aux demandes',
+            action_target: 'participant-requests',
+        })).toEqual({
+            id: 'desire-42',
+            focus: 'participant-requests',
+        });
+    });
+
+    it('ouvre l’envie sans étape lorsqu’un libellé est fourni sans cible', () => {
+        expect(getNotificationNavigation({
+            type: 'new_desire',
+            related_desire_id: 'desire-42',
+            action_label: 'Découvrir',
+        })).toEqual({ id: 'desire-42' });
+    });
 });
 
 describe('regroupement des demandes rapprochées (NIN-08)', () => {

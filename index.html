@@ -7,14 +7,14 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#6366f1">
     <meta name="description" content="Dystrax — Trouvez et partagez des envies autour de vous. Sport, sorties, apprentissage, rencontres à Abidjan.">
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/x-icon" href="assets/img/favicon.ico">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/x-icon" href="/assets/img/favicon.ico">
 
     <!-- Installation iOS : affichage autonome et icône sur l'écran d'accueil (PWA-03) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Dystrax">
-    <link rel="apple-touch-icon" href="assets/icons/icon-192-v2.png">
+    <link rel="apple-touch-icon" href="/assets/icons/icon-192-v2.png">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
@@ -37,14 +37,32 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
         rel="stylesheet">
 
-    <!-- Styles pris en charge via Vite dans main.js -->
+    <!-- Charger les styles indépendamment du graphe de modules JavaScript. -->
+    <link rel="stylesheet" href="/css/variables.css">
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/layout.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <style>
+        #desktop-only-wall[hidden], #app-startup[hidden], #app-startup [hidden] { display: none !important; }
+        #app-startup {
+            position: fixed; inset: 0; z-index: 999998; display: flex;
+            flex-direction: column; align-items: center; justify-content: center;
+            gap: 16px; padding: 24px; background: #fff; color: #111827;
+            font: 16px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; text-align: center;
+        }
+        #app-startup h1 { margin: 0; font-size: 28px; }
+        #app-startup p { max-width: 360px; margin: 0; }
+        #app-startup button { padding: 12px 20px; border: 0; border-radius: 24px; background: #6366f1; color: #fff; font: inherit; cursor: pointer; }
+        #app-startup details { max-width: 100%; text-align: left; }
+        #app-startup pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+    </style>
 
 </head>
 
 <body>
 
-    <!-- Écran de blocage desktop — visible uniquement sur écrans > 768px via CSS -->
-    <div id="desktop-only-wall" aria-hidden="true">
+    <!-- Écran desktop — grand affichage avec souris, masqué sur les appareils tactiles -->
+    <div id="desktop-only-wall" aria-hidden="true" hidden>
         <div class="dow-card">
             <div class="dow-phone-wrap">
                 <div class="dow-phone">
@@ -61,6 +79,17 @@
             <div class="dow-qr" id="dowQr" title="Ouvrir sur mobile"></div>
             <p class="dow-hint">Disponible sur iOS &amp; Android</p>
         </div>
+    </div>
+
+    <div id="app-startup" role="status" aria-live="polite">
+        <h1>Dystrax</h1>
+        <p id="app-startup-message">Chargement de l’application…</p>
+        <button id="app-startup-retry" type="button" hidden>Réessayer</button>
+        <details id="app-startup-details" hidden>
+            <summary>Détails du chargement</summary>
+            <pre id="app-startup-error"></pre>
+        </details>
+        <noscript><p>Activez JavaScript dans votre navigateur pour ouvrir Dystrax.</p></noscript>
     </div>
 
     <div class="aurora-bg"></div>
@@ -97,22 +126,86 @@
     <!-- Modales Globales (Hors du stacking context) -->
     <app-filter-modal></app-filter-modal>
 
-    <!-- Le point d'entrée Vite qui importera et définira tous les composants -->
-    <script type="module" src="js/main.ts"></script>
+    <!-- Ce script classique reste exécutable si un module échoue sur Safari. -->
+    <script>
+        (function () {
+            var panel = document.getElementById('app-startup');
+            var message = document.getElementById('app-startup-message');
+            var retry = document.getElementById('app-startup-retry');
+            var isDev = '%DEV%' === 'true';
+            var stage = 'Chargement du module de démarrage';
+            function showDetails(detail) {
+                if (!isDev) return;
+                document.getElementById('app-startup-error').textContent = detail + '\n' + navigator.userAgent;
+                document.getElementById('app-startup-details').hidden = false;
+            }
+            var timer = setTimeout(function () {
+                message.textContent = 'Le chargement prend plus de temps que prévu. Vérifiez votre connexion, puis réessayez.';
+                retry.hidden = false;
+                showDetails(stage);
+            }, 15000);
+            retry.addEventListener('click', function () { window.location.reload(); });
+            window.addEventListener('dystrax-ready', function () {
+                clearTimeout(timer);
+                panel.hidden = true;
+            }, { once: true });
+            window.addEventListener('dystrax-startup-error', function (event) {
+                clearTimeout(timer);
+                message.textContent = 'L’application n’a pas pu démarrer. Réessayez de la charger.';
+                retry.hidden = false;
+                if (event.detail) {
+                    showDetails(event.detail);
+                }
+            });
+            window.addEventListener('dystrax-loading', function () {
+                stage = 'Chargement des modules de l’application';
+            });
+            // Une erreur dans le bootstrap lui-même ne peut pas être interceptée
+            // par son import().catch(). La capter ici, hors du graphe de modules.
+            window.addEventListener('error', function (event) {
+                if (panel.hidden) return;
+                var target = event.target;
+                var moduleFailed = target && target.tagName === 'SCRIPT' && target.type === 'module';
+                var localError = event.filename && event.filename.indexOf(window.location.origin + '/') === 0;
+                if (moduleFailed || localError) {
+                    window.dispatchEvent(new CustomEvent('dystrax-startup-error', {
+                        detail: event.message || 'Impossible de charger le module de démarrage.'
+                    }));
+                }
+            }, true);
+        })();
+    </script>
+    <script type="module" src="/js/bootstrap.js"></script>
 
     <!-- QR code pour le desktop-only wall -->
     <script>
         (function () {
-            if (window.innerWidth < 769) return;
+            // Même condition que dans base.css : un grand viewport ne suffit
+            // pas à distinguer un ordinateur d'un téléphone (Safari notamment).
+            var desktopMedia = window.matchMedia('(min-width: 769px) and (hover: hover) and (pointer: fine)');
+            var wall = document.getElementById('desktop-only-wall');
             var qrEl = document.getElementById('dowQr');
-            if (!qrEl) return;
-            var url = encodeURIComponent(window.location.href);
-            var img = document.createElement('img');
-            img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + url;
-            img.alt = 'QR Code';
-            img.width = 120;
-            img.height = 120;
-            qrEl.appendChild(img);
+            if (!wall || !qrEl) return;
+
+            function updateDesktopWall() {
+                wall.hidden = !desktopMedia.matches;
+                wall.setAttribute('aria-hidden', String(!desktopMedia.matches));
+                if (!desktopMedia.matches || qrEl.firstChild) return;
+                var url = encodeURIComponent(window.location.href);
+                var img = document.createElement('img');
+                img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + url;
+                img.alt = 'QR Code';
+                img.width = 120;
+                img.height = 120;
+                qrEl.appendChild(img);
+            }
+
+            updateDesktopWall();
+            if (desktopMedia.addEventListener) {
+                desktopMedia.addEventListener('change', updateDesktopWall);
+            } else {
+                desktopMedia.addListener(updateDesktopWall);
+            }
         })();
     </script>
 </body>

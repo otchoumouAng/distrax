@@ -1,5 +1,5 @@
 import { escapeHtml } from '../../utils/escapeHtml.js';
-import { getNotificationFocus } from '../../utils/pushNavigation.js';
+import { getNotificationFocus, resolveNotificationAction } from '../../utils/pushNavigation.js';
 
 const NOTIFICATION_TYPES = {
     join_request: { icon: 'group_add', color: '#6366f1', label: 'Nouvelle demande' },
@@ -35,7 +35,8 @@ export function getNotificationNavigation(notification = {}) {
 
     // Chaque type du catalogue §12.2 ouvre l'action attendue (NIN-06) ; sans
     // cible connue, on ouvre simplement l'envie concernée.
-    const focus = getNotificationFocus(notification.type);
+    const action = resolveNotificationAction(notification);
+    const focus = (action && action.target) || getNotificationFocus(notification.type);
     return focus
         ? { id: String(desireId), focus }
         : { id: String(desireId) };
@@ -237,8 +238,19 @@ export class NotificationPage extends HTMLElement {
                     </a>
                 </div>` : '';
 
+                // Appel à l'action unique du catalogue (CDC §11, §12.1) : le
+                // libellé vient de l'API, avec repli local. Il n'est proposé que
+                // s'il mène quelque part, c'est-à-dire si l'envie est connue.
+                const action = desireId ? resolveNotificationAction(n) : null;
+                const ctaBlock = action ? `
+                <button type="button" class="notification-cta"
+                    style="align-self:flex-start; padding:9px 18px; border-radius:100px; border:none; background:var(--primary); color:white; font-size:13px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                    <i class="material-icons-round" style="font-size:16px;" aria-hidden="true">arrow_forward</i>
+                    ${escapeHtml(action.label)}
+                </button>` : '';
+
                 return `
-                <article class="notification-item ${view.isRead ? '' : 'unread'}" data-notif-id="${escapeHtml(String(n.id))}" data-is-read="${view.isRead}" data-notif-type="${escapeHtml(n.type || '')}" data-desire-id="${escapeHtml(String(desireId || ''))}"
+                <article class="notification-item ${view.isRead ? '' : 'unread'}" data-notif-id="${escapeHtml(String(n.id))}" data-is-read="${view.isRead}" data-notif-type="${escapeHtml(n.type || '')}" data-desire-id="${escapeHtml(String(desireId || ''))}" data-action-label="${escapeHtml(action && action.label ? action.label : '')}" data-action-target="${escapeHtml(action && action.target ? action.target : '')}"
                     role="button" tabindex="0" aria-label="Notification ${view.isRead ? 'lue' : 'non lue'} : ${escapeHtml(view.title)}"
                     style="background: ${view.isRead ? 'var(--bg-card)' : 'color-mix(in srgb, var(--primary) 5%, transparent)'};
                            border: 1px solid ${view.isRead ? 'var(--border-light)' : 'color-mix(in srgb, var(--primary) 20%, transparent)'};
@@ -263,6 +275,7 @@ export class NotificationPage extends HTMLElement {
                         ${!view.isRead ? '<div class="notification-unread-dot" aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: var(--primary); align-self: center; flex-shrink: 0;"></div>' : ''}
                     </div>
                     ${contactBlock}
+                    ${ctaBlock}
                 </article>`;
             }).join('');
 
@@ -281,6 +294,8 @@ export class NotificationPage extends HTMLElement {
                     const navigation = getNotificationNavigation({
                         type: notifType,
                         related_desire_id: desireId,
+                        action_label: item.dataset.actionLabel || '',
+                        action_target: item.dataset.actionTarget || '',
                     });
 
                     if (navigation) {

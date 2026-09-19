@@ -1,5 +1,13 @@
 import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
 import { resolveImageUrl, getImageVariantUrl } from '../../utils/imageUrl.js';
+import {
+    buildLikeButtonHtml,
+    createLikeController,
+    handleLikeButtonClick,
+    isLikeDisabled,
+    isTruthyAttribute,
+    parseLikeCount,
+} from '../../utils/desireLikes.js';
 
 // Badges de statut du cycle de vie d'une envie (CAT-04).
 // 'published' n'affiche aucun badge (cas nominal du catalogue).
@@ -23,7 +31,7 @@ export function getDesireStatusBadge(status) {
 
 export class DesireCard extends HTMLElement {
     static get observedAttributes() {
-        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card', 'desire-status', 'is-past', 'needs-maintenance'];
+        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card', 'desire-status', 'is-past', 'needs-maintenance', 'like-count', 'liked'];
     }
 
     connectedCallback() {
@@ -31,9 +39,14 @@ export class DesireCard extends HTMLElement {
     }
 
     attributeChangedCallback(name, oldValue, newValue) {
-        if (oldValue !== newValue && this.isConnected) {
-            this.render();
+        if (oldValue === newValue || !this.isConnected) return;
+        // Like ♥ : mise à jour ciblée du bouton, sans reconstruire la carte
+        // (évite un rendu complet à chaque bascule).
+        if (name === 'like-count' || name === 'liked') {
+            this._refreshLikeButton();
+            return;
         }
+        this.render();
     }
 
     render() {
@@ -98,6 +111,15 @@ export class DesireCard extends HTMLElement {
         const statusBadgeHtml = statusInfo
             ? `<span class="desire-status-badge status-${statusInfo.tone}"><i class="material-icons-round">${statusInfo.icon}</i> ${statusInfo.label}</span>`
             : '';
+
+        // Like ♥ : pastille alignée sur les métadonnées de la carte.
+        // Désactivée pour une activité passée ou un statut terminal (CAT-04).
+        const likeDisabled = isLikeDisabled({ mode, status: this.getAttribute('desire-status') || '' });
+        const likeBtnHtml = buildLikeButtonHtml({
+            liked: isTruthyAttribute(this.getAttribute('liked')),
+            likeCount: parseLikeCount(this.getAttribute('like-count')),
+            disabled: likeDisabled,
+        });
 
         // Demande de maintien (ORG-08/09) : proposé à l'organisateur dont
         // l'activité approche dans les envies créées de son profil.
@@ -205,6 +227,7 @@ export class DesireCard extends HTMLElement {
                         <span class="meta-tag"><i class="material-icons-round">${dateIcon}</i> ${date}</span>
                         <span class="meta-tag"><i class="material-icons-round">${priceIcon}</i> ${price}</span>
                         ${viewCountHtml}
+                        ${likeBtnHtml}
                     </div>
                 </div>
                 ${maintenanceHtml}
@@ -285,6 +308,12 @@ export class DesireCard extends HTMLElement {
                 e.stopPropagation();
                 this._dispatchDesireView(imagesArray);
             });
+        }
+
+        // ── Like ♥ : bascule optimiste, sans navigation de la carte ──
+        const likeBtn = this.querySelector('.like-btn');
+        if (likeBtn) {
+            likeBtn.addEventListener('click', (e) => handleLikeButtonClick(e, this._getLikeController()));
         }
 
         if (navigateOnCard) {
@@ -411,6 +440,75 @@ export class DesireCard extends HTMLElement {
         this._applyBoostVisibility();
     }
 
+    /** Contrôleur de like partagé (créé à la première utilisation). */
+    _getLikeController() {
+        if (!this._likeController) {
+            this._likeController = createLikeController({
+                readState: () => ({
+                    desireId: this.getAttribute('desire-id'),
+                    liked: isTruthyAttribute(this.getAttribute('liked')),
+                    likeCount: parseLikeCount(this.getAttribute('like-count')),
+                }),
+                writeState: (state) => this._applyLikeState(state),
+                onChange: (state) => this._emitLikeChanged(state),
+                onError: (error) => {
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: { message: error?.message || 'Impossible de mettre à jour le like.', type: 'error' },
+                    }));
+                },
+                loadApi: async () => (await import('../../api.js')).api,
+            });
+        }
+        return this._likeController;
+    }
+
+    /** Écrit l'état du like dans les attributs observés (déclenche le rafraîchissement ciblé). */
+    _applyLikeState(state) {
+        this.setAttribute('like-count', String(parseLikeCount(state?.likeCount)));
+        if (state?.liked === true) {
+            this.setAttribute('liked', '');
+        } else {
+            this.removeAttribute('liked');
+        }
+    }
+
+    /** Met à jour le bouton ♥ existant sans reconstruire la carte. */
+    _refreshLikeButton() {
+        const btn = this.querySelector('.like-btn');
+        if (!btn) return;
+
+        const active = isTruthyAttribute(this.getAttribute('liked'));
+        const label = active ? 'Retirer mon like' : 'Aimer cette envie';
+
+        btn.classList.toggle('is-active', active);
+        btn.disabled = isLikeDisabled({
+            mode: this.getAttribute('mode') || 'default',
+            status: this.getAttribute('desire-status') || '',
+        });
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        btn.setAttribute('aria-label', label);
+        btn.setAttribute('title', label);
+
+        const icon = btn.querySelector('.material-icons-round');
+        if (icon) icon.textContent = active ? 'favorite' : 'favorite_border';
+
+        const counter = btn.querySelector('.like-count');
+        if (counter) counter.textContent = String(parseLikeCount(this.getAttribute('like-count')));
+    }
+
+    /** Notifie l'application du nouvel état du like (après réconciliation serveur). */
+    _emitLikeChanged(state) {
+        this.dispatchEvent(new CustomEvent('desire-like-changed', {
+            bubbles: true,
+            composed: true,
+            detail: {
+                desireId: this.getAttribute('desire-id'),
+                liked: state?.liked === true,
+                likeCount: parseLikeCount(state?.likeCount),
+            },
+        }));
+    }
+
     _dispatchDesireView(imagesArray) {
         const currentMode = this.getAttribute('mode');
         const event = new CustomEvent('desire-view', {
@@ -431,6 +529,8 @@ export class DesireCard extends HTMLElement {
                 avatar:      this.getAttribute('avatar')   || DEFAULT_AVATAR_PATH,
                 images:      imagesArray,
                 description: this.getAttribute('description') || '',
+                likeCount:   parseLikeCount(this.getAttribute('like-count')),
+                likedByMe:   isTruthyAttribute(this.getAttribute('liked')),
             },
             bubbles: true,
             composed: true

@@ -1,6 +1,12 @@
 import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
 import { resolveImageUrl, getImageVariantUrl } from '../../utils/imageUrl.js';
 import { formatSpotsLabel } from '../../utils/formatSpots.js';
+import {
+    createLikeController,
+    handleLikeButtonClick,
+    isLikeDisabled,
+    parseLikeCount,
+} from '../../utils/desireLikes.js';
 
 export class DesireDetailsPage extends HTMLElement {
     constructor() {
@@ -15,6 +21,10 @@ export class DesireDetailsPage extends HTMLElement {
         this._isPast = false;      // si l'activité a déjà eu lieu (catalogue conservé)
         this._isAccepted = false;  // accepté, présence pas encore confirmée (PAR-08)
         this._isConfirmed = false; // présence confirmée (PAR-08)
+        this._likeCount = 0;       // nombre de likes de l'envie affichée
+        this._likedByMe = false;   // l'utilisateur a-t-il aimé cette envie
+        this._desireStatus = '';   // statut du cycle de vie (CAT-04)
+        this._likeController = null; // contrôleur de like mémoïsé
         /** Position de scroll sauvegardée pour restaurer à la fermeture (body lock). */
         this._savedScrollY = 0;
     }
@@ -252,6 +262,38 @@ export class DesireDetailsPage extends HTMLElement {
                     font-size: 13px;
                 }
 
+                /* —— Bouton Like ♥ (pied de page) —— */
+                .footer-actions { display: flex; align-items: center; gap: 10px; }
+                .details-like-btn {
+                    flex: 0 0 auto;
+                    height: 44px; padding: 0 10px;
+                    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                    border: none;
+                    background: transparent;
+                    color: var(--text-muted);
+                    font-size: 13px; font-weight: 600; cursor: pointer;
+                    white-space: nowrap; line-height: 1;
+                    transition: transform 0.15s ease, color 0.2s ease;
+                }
+                .details-like-btn .material-icons-round { font-size: 20px; opacity: 0.9; }
+                .details-like-btn .like-count { font-variant-numeric: tabular-nums; }
+                .details-like-btn:hover {
+                    color: #ef4444;
+                }
+                .details-like-btn:active { transform: scale(0.97); }
+                /* État actif : cœur plein */
+                .details-like-btn.is-active {
+                    color: #ef4444;
+                }
+                .details-like-btn.is-active .material-icons-round { opacity: 1; }
+                /* Activité passée ou statut terminal : plus d'interaction (CAT-04) */
+                .details-like-btn:disabled,
+                .details-like-btn:disabled:hover {
+                    color: var(--text-muted);
+                    background: transparent;
+                    opacity: 0.55; cursor: default; transform: none;
+                }
+
                 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
                 /* —— État annulé (NAV-06) —— */
@@ -286,6 +328,12 @@ export class DesireDetailsPage extends HTMLElement {
                     animation: fieldPulse 1.2s ease-in-out 3;
                     border-radius: 100px;
                     box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, transparent);
+                }
+                /* Étape mise en avant à l'ouverture d'une notification (CDC §11) :
+                   on attire l'œil sur l'action attendue sans jamais l'exécuter. */
+                .cta-focus {
+                    animation: fieldPulse 1.2s ease-in-out 3;
+                    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
                 }
                 @keyframes fieldPulse {
                     0%, 100% { background-color: transparent; }
@@ -385,12 +433,36 @@ export class DesireDetailsPage extends HTMLElement {
                         <span class="price-val" id="dPrice">15 000 FCFA</span>
                         <span class="price-sub">Par personne</span>
                     </div>
-                    <button class="join-action-btn" id="joinActionBtn">Rejoindre</button>
+                    <div class="footer-actions">
+                        <button class="details-like-btn" id="likeActionBtn" type="button"
+                                aria-pressed="false" aria-label="Aimer cette envie" title="Aimer cette envie">
+                            <i class="material-icons-round">favorite_border</i>
+                            <span class="like-count" id="likeCount">0</span>
+                        </button>
+                        <button class="join-action-btn" id="joinActionBtn">Rejoindre</button>
+                    </div>
                 </div>
             </div>
         `;
 
         this.setupListeners();
+
+        // Rester synchrone si une carte a modifié le like de l'envie affichée.
+        this._onLikeChanged = (event) => {
+            const detail = event?.detail || {};
+            if (!this._desireId || detail.desireId == null) return;
+            if (String(detail.desireId) !== String(this._desireId)) return;
+            this._likedByMe = detail.liked === true;
+            this._likeCount = parseLikeCount(detail.likeCount);
+            this._updateLikeButton();
+        };
+        window.addEventListener('desire-like-changed', this._onLikeChanged);
+    }
+
+    disconnectedCallback() {
+        if (this._onLikeChanged) {
+            window.removeEventListener('desire-like-changed', this._onLikeChanged);
+        }
     }
 
     setupListeners() {
@@ -447,6 +519,12 @@ export class DesireDetailsPage extends HTMLElement {
                     this.updateThumbnails();
                 }
             });
+        }
+
+        // ── Bouton Like ♥ (bascule optimiste) ──────────────────
+        const likeBtn = this.querySelector('#likeActionBtn');
+        if (likeBtn) {
+            likeBtn.addEventListener('click', (e) => handleLikeButtonClick(e, this._getLikeController()));
         }
 
         // ── Bouton Rejoindre / Quitter ─────────────────────────
@@ -565,6 +643,11 @@ export class DesireDetailsPage extends HTMLElement {
 
         btn.classList.remove('joined', 'creator-badge');
         btn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
+        // Réinitialiser ce que le cas « créateur » masque, pour éviter toute fuite
+        // d'état lors d'une mise à jour ultérieure du même bouton.
+        btn.style.display = '';
+        const priceInfo = this.querySelector('.price-info');
+        if (priceInfo) priceInfo.style.display = '';
 
         // Masquer la carte organisateur et le footer CTA si c'est le créateur
         const hostCard = this.querySelector('.host-card');
@@ -590,7 +673,12 @@ export class DesireDetailsPage extends HTMLElement {
         if (pastBanner) pastBanner.style.display = 'none';
 
         if (this._isCreator) {
-            if (footer) footer.style.display = 'none';
+            // Le créateur ne s'inscrit pas à sa propre envie : on masque le prix et
+            // l'inscription, mais on conserve le ♥ (aimer sa propre envie est autorisé,
+            // simplement sans notification — PUS-10).
+            if (priceInfo) priceInfo.style.display = 'none';
+            btn.style.display = 'none';
+            if (footer) footer.style.display = '';
         } else if (this._isFull) {
             // Envie complète : bouton désactivé
             if (footer) footer.style.display = '';
@@ -633,6 +721,72 @@ export class DesireDetailsPage extends HTMLElement {
             btn.style.color = 'white';
             btn.innerHTML = 'Rejoindre';
         }
+    }
+
+    /** Contrôleur de like mémoïsé (bascule optimiste + réconciliation). */
+    _getLikeController() {
+        if (!this._likeController) {
+            this._likeController = createLikeController({
+                readState: () => ({
+                    desireId: this._desireId,
+                    liked: this._likedByMe,
+                    likeCount: this._likeCount,
+                }),
+                writeState: (state) => {
+                    this._likedByMe = state.liked === true;
+                    this._likeCount = parseLikeCount(state.likeCount);
+                    this._updateLikeButton();
+                },
+                onChange: (state) => this._emitLikeChanged(state),
+                onError: () => {
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        bubbles: true,
+                        composed: true,
+                        detail: { message: 'Impossible de mettre à jour le like. Réessaie.' },
+                    }));
+                },
+                loadApi: async () => (await import('../../api.js')).api,
+            });
+        }
+        return this._likeController;
+    }
+
+    /** Reflète l'état du like sur le bouton ♥ du pied de page. */
+    _updateLikeButton() {
+        const btn = this.querySelector('#likeActionBtn');
+        if (!btn) return;
+
+        const liked = this._likedByMe === true;
+        const disabled = isLikeDisabled({
+            mode: this._isPast ? 'past' : 'default',
+            status: this._desireStatus,
+        });
+        const label = liked ? 'Retirer mon like' : 'Aimer cette envie';
+
+        btn.classList.toggle('is-active', liked);
+        btn.disabled = disabled;
+        btn.setAttribute('aria-pressed', liked ? 'true' : 'false');
+        btn.setAttribute('aria-label', label);
+        btn.setAttribute('title', label);
+
+        const icon = btn.querySelector('.material-icons-round');
+        if (icon) icon.textContent = liked ? 'favorite' : 'favorite_border';
+        const count = btn.querySelector('.like-count');
+        if (count) count.textContent = String(parseLikeCount(this._likeCount));
+    }
+
+    /** Notifie les autres vues (cartes) du changement de like. */
+    _emitLikeChanged(state) {
+        if (!this._desireId) return;
+        this.dispatchEvent(new CustomEvent('desire-like-changed', {
+            bubbles: true,
+            composed: true,
+            detail: {
+                desireId: this._desireId,
+                liked: state.liked === true,
+                likeCount: parseLikeCount(state.likeCount),
+            },
+        }));
     }
 
     _formatDateDetail(iso) {
@@ -699,6 +853,12 @@ export class DesireDetailsPage extends HTMLElement {
         this._isCancelled = data.desireStatus === 'cancelled';
         // Activité déjà passée : consultable mais non rejoignable.
         this._isPast = data.isPast === true || data.is_past === true;
+        this._desireStatus = data.desireStatus || data.desire_status || '';
+
+        // Like ♥ : état initial issu de la carte (likeCount/likedByMe) ou de l'API.
+        this._likeCount = parseLikeCount(data.likeCount ?? data.like_count);
+        this._likedByMe = (data.likedByMe ?? data.liked_by_me) === true;
+        this._updateLikeButton();
 
         // Hydrate data
         this.querySelector('#dTitle').textContent = data.title || '';
@@ -802,7 +962,8 @@ export class DesireDetailsPage extends HTMLElement {
     /**
      * Fait défiler la vue vers l'action attendue par la notification (NIN-06).
      * Les sections conditionnelles (participants, footer) sont ignorées si
-     * l'état courant ne les affiche pas.
+     * l'état courant ne les affiche pas. L'action n'est jamais exécutée :
+     * l'utilisateur reste maître de la confirmation (CDC §11).
      */
     _focusTarget(focus) {
         const selectors = {
@@ -819,6 +980,9 @@ export class DesireDetailsPage extends HTMLElement {
         element.setAttribute('tabindex', '-1');
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         element.focus({ preventScroll: true });
+
+        element.classList.add('cta-focus');
+        setTimeout(() => element.classList.remove('cta-focus'), 4000);
     }
 
     /**
@@ -950,8 +1114,8 @@ export class DesireDetailsPage extends HTMLElement {
 
             if (badge) badge.textContent = participants.length;
 
-            // Compteurs accepté/refusé
-            const accepted = participants.filter(p => p.status === 'accepted').length;
+            // Compteurs accepté/refusé (une présence confirmée reste un engagement accepté)
+            const accepted = participants.filter(p => p.status === 'accepted' || p.status === 'confirmed').length;
             const rejected = participants.filter(p => p.status === 'rejected').length;
             const countersEl = this.querySelector('#participantsCounters');
             if (countersEl && (accepted > 0 || rejected > 0)) {
@@ -964,6 +1128,7 @@ export class DesireDetailsPage extends HTMLElement {
 
             // Styles des statuts
             const statusStyles = {
+                confirmed: { bg: '#dbeafe', color: '#2563eb', label: 'Confirmé' },
                 accepted: { bg: '#d1fae5', color: '#059669', label: 'Accepté' },
                 rejected: { bg: '#fee2e2', color: '#ef4444', label: 'Refusé' },
                 pending: { bg: '#fef3c7', color: '#d97706', label: 'En attente' },
@@ -979,7 +1144,7 @@ export class DesireDetailsPage extends HTMLElement {
                 const phoneDigits = p.phone ? String(p.phone).replace(/\D/g, '') : '';
                 const userIdSafe = escapeHtml(String(p.user_id));
                 return `
-                <div class="participant-item" data-user-id="${userIdSafe}" style="display:flex; flex-direction:column; gap:8px; padding:12px; border-radius:12px; background:var(--bg-main); border:1px solid ${p.status === 'accepted' ? '#10b981' : 'var(--border-light)'};">
+                <div class="participant-item" data-user-id="${userIdSafe}" style="display:flex; flex-direction:column; gap:8px; padding:12px; border-radius:12px; background:var(--bg-main); border:1px solid ${(p.status === 'accepted' || p.status === 'confirmed') ? '#10b981' : 'var(--border-light)'};">
                     <div style="display:flex; align-items:center; gap:12px;">
                         <img 
                             src="${escapeHtml(avatarSrc)}"

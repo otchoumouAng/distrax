@@ -88,7 +88,7 @@ export class ProfilePage extends HTMLElement {
                             <span>Installer Dystrax</span>
                             <i class="material-icons-round profile-action-arrow">chevron_right</i>
                         </button>
-                        <button class="profile-action-item">
+                        <button class="profile-action-item" id="notifPrefsBtn">
                             <i class="material-icons-round">notifications_none</i>
                             <span>Notifications</span>
                             <i class="material-icons-round profile-action-arrow">chevron_right</i>
@@ -118,8 +118,44 @@ export class ProfilePage extends HTMLElement {
                         </button>
                     </div>
 
+                    <!-- Pays de résidence effectif + correction (§7 PER-05).
+                         Placé après les menus, sans fond ni bordure. -->
+                    <div id="profileCountryRow" style="display: flex; align-items: center; gap: 8px; margin: 8px 16px 0; padding: 8px 0;">
+                        <p id="profileCountryLabel" style="margin: 0; flex: 1; min-width: 0; font-size: 13px; color: var(--text-muted);">Pays de résidence : ...</p>
+                        <button type="button" id="profileCountryEdit" style="background: none; border: none; color: var(--primary); font-weight: 600; font-size: 13px; cursor: pointer; padding: 4px;">Modifier</button>
+                    </div>
+                    <div id="profileCountryPicker" style="display: none; margin: 8px 16px 0;">
+                        <select id="profileCountrySelect" style="width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-main); font-size: 15px; font-family: inherit;"></select>
+                        <p id="profileCountryHint" style="margin: 8px 0 0; font-size: 12px; color: var(--text-muted);"></p>
+                    </div>
+
                     <div style="height: 40px;"></div>
 
+                </div>
+
+                <!-- Réglages de notification par catégorie (MNO-08). Le choix
+                     vaut pour tous les émetteurs, y compris les envois
+                     transactionnels. -->
+                <div id="notifPrefsOverlay" role="dialog" aria-modal="true" aria-labelledby="notifPrefsTitle"
+                     style="display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.45); align-items: flex-end; justify-content: center;">
+                    <div style="background: var(--bg-card); width: 100%; max-width: 560px; max-height: 85svh; overflow-y: auto; border-radius: 20px 20px 0 0; padding: 20px 20px 32px; box-shadow: 0 -8px 32px rgba(0,0,0,0.2);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <h2 id="notifPrefsTitle" style="margin: 0; font-size: 18px; flex: 1;">Notifications</h2>
+                            <button type="button" id="notifPrefsClose" aria-label="Fermer"
+                                    style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex;">
+                                <i class="material-icons-round">close</i>
+                            </button>
+                        </div>
+                        <p style="margin: 4px 0 16px; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+                            Choisis les catégories qui peuvent t'envoyer des notifications.
+                        </p>
+                        <div id="notifPrefsList" style="display: flex; flex-direction: column;">
+                            <p style="color: var(--text-muted); text-align: center; padding: 24px 0;">Chargement...</p>
+                        </div>
+                        <p style="margin: 16px 0 0; font-size: 12px; color: var(--text-light); line-height: 1.5;">
+                            Les annulations et modifications de dernière minute, ainsi que les liens de réinitialisation du mot de passe, te sont toujours signalés.
+                        </p>
+                    </div>
                 </div>
             </section>
         `;
@@ -245,6 +281,22 @@ export class ProfilePage extends HTMLElement {
             });
         }
 
+        // Réglages de notification par catégorie (MNO-08).
+        const notifPrefsBtn = this.querySelector('#notifPrefsBtn');
+        if (notifPrefsBtn) {
+            notifPrefsBtn.addEventListener('click', () => this.openNotificationPreferences());
+        }
+        const notifPrefsClose = this.querySelector('#notifPrefsClose');
+        if (notifPrefsClose) {
+            notifPrefsClose.addEventListener('click', () => this.closeNotificationPreferences());
+        }
+        const notifPrefsOverlay = this.querySelector('#notifPrefsOverlay');
+        if (notifPrefsOverlay) {
+            notifPrefsOverlay.addEventListener('click', (event) => {
+                if (event.target === notifPrefsOverlay) this.closeNotificationPreferences();
+            });
+        }
+
         // Se déconnecter — arrêt session manager + appel api.logout() + redirection login
         const logoutBtn = this.querySelector('#logoutBtn');
         if (logoutBtn) {
@@ -263,6 +315,16 @@ export class ProfilePage extends HTMLElement {
                 api.logout();
                 this.dispatchEvent(new CustomEvent('navigate-login', { bubbles: true, composed: true }));
             });
+        }
+
+        // Pays de résidence — correction manuelle (§7, GEO-08)
+        const countryEditBtn = this.querySelector('#profileCountryEdit');
+        if (countryEditBtn) {
+            countryEditBtn.addEventListener('click', () => this._openCountryPicker());
+        }
+        const countrySelect = this.querySelector('#profileCountrySelect');
+        if (countrySelect) {
+            countrySelect.addEventListener('change', () => this._applyCountryChoice(countrySelect.value));
         }
 
         // Installer Dystrax — entrée permanente masquée si déjà installée (PWA-02/05)
@@ -468,9 +530,192 @@ export class ProfilePage extends HTMLElement {
         }
     }
 
+    // ── Pays de résidence effectif (§7, GEO-08) ──────────────────
+
+    /** Résout le libellé lisible du pays à partir du contexte API. */
+    _resolveCountryLabel(context, countries, code) {
+        const country = context?.country;
+        const fromContext = (country && typeof country === 'object') ? (country.label || country.name) : null;
+        if (fromContext) return fromContext;
+        const match = (countries || []).find((item) => item && item.code === code);
+        return match?.label || code;
+    }
+
+    /**
+     * Affiche le pays de résidence effectif. Un pays simplement détecté est
+     * présenté comme tel afin d'inviter à la correction.
+     */
+    async refreshCountryLabel() {
+        const labelEl = this.querySelector('#profileCountryLabel');
+        if (!labelEl) return;
+        const { api } = await import('../../api.js');
+        // On interroge toujours l'API : le pays peut venir du compte ou de la
+        // détection IP sans être encore mémorisé localement.
+        const storedCode = api.getCountryCode();
+        try {
+            const [context, countries] = await Promise.all([
+                api.getCountryContext(),
+                api.getCountries().catch(() => []),
+            ]);
+            const code = context?.country_code || storedCode;
+            if (!code) {
+                labelEl.textContent = 'Pays de résidence : non défini';
+                return;
+            }
+            const label = this._resolveCountryLabel(context, countries, code);
+            // Le pays n'est « de résidence » qu'après confirmation explicite
+            // (`user_confirmed`, §14) ; une détection IP reste présentée comme
+            // telle afin d'inviter à la correction.
+            const detected = context?.source && context.source !== 'user_confirmed';
+            labelEl.textContent = `${detected ? 'Pays détecté' : 'Pays de résidence'} : ${label}`;
+        } catch (err) {
+            // Repli : afficher le code mémorisé plutôt que de laisser « ... ».
+            labelEl.textContent = storedCode
+                ? `Pays de résidence : ${storedCode}`
+                : 'Pays de résidence : non défini';
+        }
+    }
+
+    /** Ouvre le sélecteur de pays et le peuple depuis l'API (GEO-08). */
+    async _openCountryPicker() {
+        const picker = this.querySelector('#profileCountryPicker');
+        const select = this.querySelector('#profileCountrySelect');
+        const hint = this.querySelector('#profileCountryHint');
+        if (!picker || !select) return;
+        picker.style.display = 'block';
+        if (hint) hint.textContent = 'Chargement des pays...';
+        try {
+            const { api } = await import('../../api.js');
+            const countries = (await api.getCountries())
+                .filter((c) => c && c.code && c.is_active !== false);
+            const current = api.getCountryCode();
+            select.innerHTML = countries
+                .map((c) => `<option value="${escapeHtml(c.code)}"${c.code === current ? ' selected' : ''}>${escapeHtml(c.label || c.code)}</option>`)
+                .join('');
+            if (countries.some((c) => c.code === current)) select.value = current;
+            if (hint) hint.textContent = countries.length
+                ? 'Choisis le pays dans lequel tu résides.'
+                : 'Aucun pays disponible pour le moment.';
+        } catch (err) {
+            console.warn('[ProfilePage] Pays non chargés:', err.message);
+            if (hint) hint.textContent = 'Impossible de charger la liste des pays.';
+        }
+    }
+
+    /**
+     * Applique le pays choisi : le contexte est enregistré côté API, puis les
+     * données dépendantes du pays sont rechargées de façon cohérente (VIS-10).
+     */
+    async _applyCountryChoice(code) {
+        if (!code) return;
+        const picker = this.querySelector('#profileCountryPicker');
+        const hint = this.querySelector('#profileCountryHint');
+        if (hint) hint.textContent = 'Enregistrement...';
+        try {
+            const { api } = await import('../../api.js');
+            const context = await api.setCountryContext(code);
+            const label = this._resolveCountryLabel(context, [], context?.country_code || code);
+            const labelEl = this.querySelector('#profileCountryLabel');
+            if (labelEl) labelEl.textContent = `Pays de résidence : ${label}`;
+            if (picker) picker.style.display = 'none';
+            if (hint) hint.textContent = '';
+            // Réalignement cohérent : l'exploration et la modale de filtres
+            // écoutent cet événement pour recharger leurs données par pays.
+            document.dispatchEvent(new CustomEvent('country-context-changed', {
+                detail: { country_code: code, source: 'profile' },
+            }));
+        } catch (err) {
+            console.warn('[ProfilePage] Changement de pays échoué:', err.message);
+            if (hint) hint.textContent = 'Le pays n\'a pas pu être enregistré. Réessaie.';
+        }
+    }
+
+    // ── Réglages de notification par catégorie (MNO-08) ──────────
+
+    openNotificationPreferences() {
+        const overlay = this.querySelector('#notifPrefsOverlay');
+        if (!overlay) return;
+        overlay.style.display = 'flex';
+        this.loadNotificationPreferences();
+    }
+
+    closeNotificationPreferences() {
+        const overlay = this.querySelector('#notifPrefsOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    async loadNotificationPreferences() {
+        const list = this.querySelector('#notifPrefsList');
+        if (!list) return;
+        list.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px 0;">Chargement...</p>';
+        try {
+            const { api } = await import('../../api.js');
+            const data = await api.getNotificationPreferences();
+            this.renderNotificationPreferences(data?.categories || []);
+        } catch (err) {
+            list.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px 0;">Impossible de charger les réglages.</p>';
+        }
+    }
+
+    renderNotificationPreferences(categories) {
+        const list = this.querySelector('#notifPrefsList');
+        if (!list) return;
+        if (!categories.length) {
+            list.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 24px 0;">Aucune catégorie disponible.</p>';
+            return;
+        }
+
+        list.innerHTML = categories.map(category => `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-light);">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 14px; font-weight: 600; color: var(--text-main);">${escapeHtml(category.label)}</div>
+                    <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px; line-height: 1.4;">${escapeHtml(category.description)}</div>
+                </div>
+                <label style="position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; cursor: pointer;">
+                    <input type="checkbox" data-category-slug="${escapeHtml(category.slug)}" ${category.enabled ? 'checked' : ''} style="opacity: 0; width: 0; height: 0;">
+                    <span class="notif-prefs-track" style="position: absolute; inset: 0; border-radius: 100px; transition: background 0.2s;"></span>
+                    <span class="notif-prefs-knob" style="position: absolute; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); transition: left 0.2s;"></span>
+                </label>
+            </div>`).join('');
+
+        list.querySelectorAll('input[data-category-slug]').forEach(input => {
+            this._paintNotifToggle(input, input.checked);
+            input.addEventListener('change', () => {
+                this.saveNotificationPreference(input.dataset.categorySlug, input.checked, input);
+            });
+        });
+    }
+
+    _paintNotifToggle(input, enabled) {
+        const track = input.parentElement?.querySelector('.notif-prefs-track');
+        const knob = input.parentElement?.querySelector('.notif-prefs-knob');
+        if (track) track.style.background = enabled ? 'var(--primary)' : 'var(--border-light)';
+        if (knob) knob.style.left = enabled ? '23px' : '3px';
+    }
+
+    async saveNotificationPreference(slug, enabled, input) {
+        try {
+            const { api } = await import('../../api.js');
+            const data = await api.updateNotificationPreferences({ [slug]: enabled });
+            const category = (data?.categories || []).find(item => item.slug === slug);
+            const effective = category ? category.enabled : enabled;
+            input.checked = effective;
+            this._paintNotifToggle(input, effective);
+        } catch (err) {
+            // Un réglage non enregistré ne doit pas laisser l'interrupteur dans
+            // un état que le serveur ignore : on revient au choix précédent.
+            input.checked = !enabled;
+            this._paintNotifToggle(input, !enabled);
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: 'Réglage non enregistré. Réessaie.', type: 'error' },
+            }));
+        }
+    }
+
     show() {
         this.querySelector('#profilePage').style.display = 'block';
         this.refreshInstallEntry();
+        this.refreshCountryLabel();
         this.loadProfile();
     }
 

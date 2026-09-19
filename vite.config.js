@@ -1,7 +1,19 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
+import { normalizeRequestPath } from './scripts/normalizeRequestPath.js';
 
 export default defineConfig({
+    plugins: [{
+        // Sur Windows, //js/main.ts peut être interprété comme un chemin réseau.
+        // Rediriger avant les middlewares de transformation et de fichiers Vite.
+        name: 'normalize-local-paths',
+        configureServer(server) {
+            server.middlewares.use(normalizeRequestPath);
+        },
+        configurePreviewServer(server) {
+            server.middlewares.use(normalizeRequestPath);
+        },
+    }],
     test: {
         environment: 'node',
         include: ['js/**/*.test.js', 'js/**/*.spec.js'],

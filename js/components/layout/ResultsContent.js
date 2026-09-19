@@ -161,6 +161,9 @@ export class ResultsContent extends HTMLElement {
             card.setAttribute('images', d.images && d.images.length > 0 ? d.images.join(',') : '');
             card.setAttribute('description', d.description || '');
             if (d.view_count != null) card.setAttribute('view-count', String(d.view_count));
+            // Like ♥ : compteur et état « aimé par moi » (attribut booléen).
+            card.setAttribute('like-count', String(d.like_count || 0));
+            if (d.liked_by_me) card.setAttribute('liked', '');
             // Activité passée : conservée dans le catalogue mais non rejoignable
             // (CTA désactivé). Prioritaire sur les autres modes.
             if (d.is_past) {
@@ -182,7 +185,7 @@ export class ResultsContent extends HTMLElement {
             card.addEventListener('desire-joined', (e) => {
                 e.stopPropagation(); // Empêche le toast intempestif
                 document.dispatchEvent(new CustomEvent('view-desire', {
-                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, address: d.address, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: formatSpotsLabel(d.spots_taken, d.max_spots, d.is_unlimited), price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description, isPast: !!d.is_past },
+                    detail: { id: d.id, authorId: d.author_id || null, title: d.title, author: d.author_pseudo, timeAgo, commune: d.commune, address: d.address, date: new Date(d.event_date).toLocaleString('fr-FR'), spots: formatSpotsLabel(d.spots_taken, d.max_spots, d.is_unlimited), price, avatar: d.author_avatar_url || DEFAULT_AVATAR_PATH, images: d.images || [], description: d.description, isPast: !!d.is_past, likeCount: d.like_count || 0, likedByMe: !!d.liked_by_me },
                     bubbles: true, composed: true,
                 }));
             });

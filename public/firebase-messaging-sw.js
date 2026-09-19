@@ -43,12 +43,56 @@ function extractPushData(payload = {}) {
             root.destination,
             fcmOptions.link,
         ),
+        action_label: firstNonEmptyString(
+            data.action_label,
+            data.actionLabel,
+            root.action_label,
+            fcmData.action_label,
+        ),
+        action_target: firstNonEmptyString(
+            data.action_target,
+            data.actionTarget,
+            root.action_target,
+            fcmData.action_target,
+        ),
         title: firstNonEmptyString(data.title, notification.title, fcmNotification.title),
         body: firstNonEmptyString(data.body, notification.body, fcmNotification.body),
     };
 }
 
-function resolveTargetUrl(data) {
+/*
+ * Repli local de l'appel à l'action (CDC §11, §12.1). Le service worker ne peut
+ * pas importer le module partagé : cette table ne sert que si l'API n'a pas
+ * fourni `action_label`.
+ */
+const NOTIFICATION_ACTIONS = {
+    join_request: { label: 'Voir et répondre', target: 'participant-requests' },
+    join_accepted: { label: 'Confirmer ma présence', target: 'confirm-presence' },
+    join_rejected: { label: "Voir d'autres envies", target: '' },
+    presence_confirm: { label: 'Je confirme', target: 'confirm-presence' },
+    organizer_keep: { label: "Maintenir l'activité", target: '' },
+    reminder_day: { label: 'Voir les détails', target: 'practical-info' },
+    reminder_soon: { label: "Voir l'itinéraire", target: 'practical-info' },
+    desire_updated: { label: 'Voir la modification', target: 'practical-info' },
+    desire_cancelled: { label: "Voir d'autres envies", target: '' },
+    post_activity: { label: 'Donner mon retour', target: '' },
+    republish: { label: 'Reprogrammer', target: '' },
+    recommendation: { label: 'Découvrir', target: '' },
+    new_desire: { label: 'Découvrir', target: '' },
+};
+
+const ACTION_BUTTON_ID = 'cta';
+
+function resolveNotificationAction(data = {}) {
+    const label = firstNonEmptyString(data.action_label, data.actionLabel);
+    if (label) {
+        return { label, target: firstNonEmptyString(data.action_target, data.actionTarget) };
+    }
+    const type = firstNonEmptyString(data.type);
+    return (type && NOTIFICATION_ACTIONS[type]) || null;
+}
+
+function resolveTargetUrl(data, actionTarget = '') {
     const desireId = DESIRE_ID_PATTERN.test(data.desire_id || '') ? data.desire_id : '';
     let target;
 
@@ -79,6 +123,9 @@ function resolveTargetUrl(data) {
         const params = new URLSearchParams(query);
         if (hasValidType) params.set('notification', data.type);
         if (hasValidNotificationId) params.set('notification_id', notificationId);
+        // L'étape choisie par un bouton natif doit survivre à l'ouverture d'une
+        // nouvelle fenêtre : elle voyage donc dans le hash comme le type.
+        if (actionTarget) params.set('notification_action', actionTarget);
         target.hash = `${route}?${params}`;
     }
 
@@ -94,7 +141,11 @@ self.addEventListener('notificationclick', (event) => {
     event.notification.close();
 
     const data = extractPushData(event.notification.data);
-    const targetUrl = resolveTargetUrl(data);
+    // Un bouton natif vaut choix explicite de l'étape à ouvrir ; le clic sur le
+    // corps de la notification reste l'ouverture par défaut.
+    const action = resolveNotificationAction(data);
+    const actionTarget = event.action === ACTION_BUTTON_ID && action ? action.target : '';
+    const targetUrl = resolveTargetUrl(data, actionTarget);
 
     event.waitUntil((async () => {
         const windowClients = await self.clients.matchAll({
@@ -113,7 +164,7 @@ self.addEventListener('notificationclick', (event) => {
             await existingClient.focus();
             existingClient.postMessage({
                 type: 'FCM_CLICK',
-                data,
+                data: actionTarget ? { ...data, action_target: actionTarget } : data,
                 url: targetUrl,
             });
             return;
@@ -174,6 +225,13 @@ if (hasFirebaseConfig) {
 
         if (data.event_id || data.notification_id) {
             notificationOptions.tag = `dystrax-${data.event_id || data.notification_id}`;
+        }
+
+        // Bouton natif portant le libellé de l'action unique (CDC §11) : le clic
+        // ouvre l'étape de confirmation, il ne l'exécute pas.
+        const action = resolveNotificationAction(data);
+        if (action && action.label) {
+            notificationOptions.actions = [{ action: ACTION_BUTTON_ID, title: action.label }];
         }
 
         return self.registration.showNotification(data.title || 'Dystrax', notificationOptions);

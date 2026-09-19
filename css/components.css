@@ -635,6 +635,65 @@ body.state-results .scroll-down-indicator {
     opacity: 0.75;
 }
 
+/* ── Like ♥ — pastille alignée sur les métadonnées de la carte ── */
+.like-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    white-space: nowrap;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: color 0.2s ease, transform 0.15s ease;
+}
+
+.like-btn .material-icons-round {
+    font-size: 16px;
+    opacity: 0.85;
+}
+
+.like-btn .like-count {
+    font-variant-numeric: tabular-nums;
+}
+
+.like-btn:hover {
+    color: #ef4444;
+    background: transparent;
+}
+
+.like-btn:active { transform: scale(0.94); }
+
+/* État actif : cœur plein */
+.like-btn.is-active {
+    color: #ef4444;
+    background: transparent;
+}
+
+.like-btn.is-active .material-icons-round { opacity: 1; }
+
+/* État désactivé : activité passée ou statut terminal (CAT-04) */
+.like-btn:disabled,
+.like-btn:disabled:hover {
+    color: var(--text-muted);
+    background: transparent;
+    opacity: 0.55;
+    cursor: default;
+    transform: none;
+}
+
+[data-theme="dark"] .like-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-light);
+}
+
+[data-theme="dark"] .like-btn.is-active { color: #f87171; }
+
 .card-footer {
     display: flex;
     justify-content: space-between;
@@ -3018,6 +3077,32 @@ textarea.form-input {
     margin-top: 4px;
     font-size: 12px;
     color: #ef4444;
+}
+
+/* Cartes des envois individuels de la file d'envoi (MNO-09) */
+.admin-outbox-card {
+    display: block;
+    width: 100%;
+    padding: 10px 8px;
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.admin-outbox-card:last-child {
+    border-bottom: none;
+}
+
+.admin-outbox-card.is-selected {
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+#adminOutboxDetail {
+    margin-top: 12px;
 }
 
 /* Campagnes de notification (MNO-18) */

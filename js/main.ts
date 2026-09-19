@@ -1,8 +1,4 @@
-// 1. IMPORTS CSS
-import '../css/variables.css';
-import '../css/base.css';
-import '../css/layout.css';
-import '../css/components.css';
+// Les styles sont chargés directement dans index.html, même si un module échoue.
 
 // 2. IMPORT DU STORE GLOBAL
 import { GlobalStore } from './store/GlobalStore.js';
@@ -73,7 +69,9 @@ function offerContextualInstall() {
 /* ---------------------------------------------------------------
    5. NAVIGATION SPA
    --------------------------------------------------------------- */
-document.addEventListener('DOMContentLoaded', () => {
+// Le bootstrap appelle cette fonction une fois les modules chargés. Ne pas
+// dépendre de DOMContentLoaded : il peut déjà avoir eu lieu sur un réseau lent.
+export function initializeApp() {
     
     // Initialiser Firebase (si configuré)
     initFirebase().then(() => registerDeviceForExistingPermission()).catch(() => {});
@@ -128,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'z-index: 9999', 'opacity: 0',
         'transition: opacity 0.25s, transform 0.25s',
         'pointer-events: none', 'white-space: nowrap',
+        'max-width: min(520px, calc(100vw - 32px))',
         'display: flex', 'align-items: center', 'gap: 8px'
     ].join(';');
     document.body.appendChild(toastEl);
@@ -144,10 +143,12 @@ document.addEventListener('DOMContentLoaded', () => {
         toastEl.style.background = bgColors[type] || bgColors.success;
         toastEl.style.color = '#fff';
         toastEl.innerHTML = [
-            `<i class="material-icons-round" style="font-size: 18px;">${icons[type]}</i>`,
+            `<i class="material-icons-round" style="font-size: 18px; flex-shrink: 0;">${icons[type]}</i>`,
             `<span>${escapeHtml(message)}</span>`,
-            action ? `<span style="font-weight:700;text-decoration:underline;margin-left:4px;">${escapeHtml(action.label)}</span>` : '',
+            action ? `<span style="font-weight:700;text-decoration:underline;margin-left:4px;white-space:nowrap;flex-shrink:0;">${escapeHtml(action.label)}</span>` : '',
         ].join(' ');
+        // Un appel à l'action a besoin de temps pour être lu et cliqué.
+        toastEl.style.whiteSpace = action ? 'normal' : 'nowrap';
         toastEl.style.pointerEvents = action ? 'auto' : 'none';
         toastEl.style.cursor = action ? 'pointer' : 'default';
         toastEl.onclick = action ? () => {
@@ -162,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toastEl.style.transform = 'translateX(-50%) translateY(-20px)';
             toastEl.style.pointerEvents = 'none';
             toastEl.onclick = null;
-        }, 3000);
+        }, action ? 6000 : 3000);
     }
 
     // Écouter l'événement show-toast émis par les composants
@@ -188,23 +189,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // sessionStorage pour survivre à un rechargement pendant le login.
     const PENDING_DESTINATION_KEY = 'dystrax-pending-destination';
 
-    function rememberPendingDestination(id: string, notificationType?: string) {
+    function rememberPendingDestination(id: string, notificationType?: string, actionTarget?: string) {
         if (!id) return;
         try {
             sessionStorage.setItem(PENDING_DESTINATION_KEY, JSON.stringify({
                 id,
                 notificationType: notificationType || '',
+                actionTarget: actionTarget || '',
             }));
         } catch { /* stockage indisponible */ }
     }
 
-    function readPendingDestination(): { id: string; notificationType: string } | null {
+    function readPendingDestination(): { id: string; notificationType: string; actionTarget: string } | null {
         try {
             const raw = sessionStorage.getItem(PENDING_DESTINATION_KEY);
             if (!raw) return null;
             const parsed = JSON.parse(raw);
             return parsed?.id
-                ? { id: String(parsed.id), notificationType: parsed.notificationType || '' }
+                ? {
+                    id: String(parsed.id),
+                    notificationType: parsed.notificationType || '',
+                    actionTarget: parsed.actionTarget || '',
+                }
                 : null;
         } catch { return null; }
     }
@@ -387,6 +393,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialHashQuery = hashRaw.includes('?') ? hashRaw.slice(hashRaw.indexOf('?') + 1) : '';
     const initialNotificationType = new URLSearchParams(initialHashQuery).get('notification') || '';
     const initialNotificationId = new URLSearchParams(initialHashQuery).get('notification_id') || '';
+    // Étape choisie depuis un bouton natif Android (CDC §11) ; le type sert de
+    // repli pour une notification ouverte par son corps.
+    const initialNotificationAction = new URLSearchParams(initialHashQuery).get('notification_action') || '';
     const initialEditId = new URLSearchParams(initialHashQuery).get('edit') || '';
     history.replaceState({ page: initialHash }, '', window.location.hash || '#home');
     _currentPageId = initialHash || 'home';
@@ -421,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Ouvrir l'overlay de détails si c'est un lien partagé (et pousser un état pour que "retour" ferme l'overlay)
         if (_desireIdFromLink) {
             // Mémoriser la cible : si une reconnexion est nécessaire, on y revient après login.
-            rememberPendingDestination(_desireIdFromLink, initialNotificationType);
+            rememberPendingDestination(_desireIdFromLink, initialNotificationType, initialNotificationAction);
             // Journaliser l'ouverture d'une notification push au lancement à froid.
             if (initialNotificationId && api.isAuthenticated()) {
                 api.trackNotificationOpen(initialNotificationId).catch(() => {});
@@ -431,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 desireDetailsPage?.open?.({
                     id: _desireIdFromLink,
                     notificationType: initialNotificationType,
-                    focus: getNotificationFocus(initialNotificationType),
+                    focus: initialNotificationAction || getNotificationFocus(initialNotificationType),
                 });
             }, 150);
         }
@@ -487,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (target.desireId) {
             // Mémoriser la destination pour la restaurer si une ré-authentification est requise.
-            rememberPendingDestination(target.desireId, target.type);
+            rememberPendingDestination(target.desireId, target.type, target.actionTarget);
             const targetHash = `#desire/${target.desireId}`;
             if (window.location.hash !== targetHash) {
                 history.pushState(
@@ -500,7 +509,9 @@ document.addEventListener('DOMContentLoaded', () => {
             await desireDetailsPage?.open?.({
                 id: target.desireId,
                 notificationType: target.type,
-                focus: getNotificationFocus(target.type),
+                // L'étape choisie depuis un bouton natif Android prime sur la cible
+                // par défaut du type de notification (CDC §11).
+                focus: target.actionTarget || getNotificationFocus(target.type),
             });
             return;
         }
@@ -578,7 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 desireDetailsPage?.open?.({
                     id: pending.id,
                     notificationType: pending.notificationType,
-                    focus: getNotificationFocus(pending.notificationType),
+                    focus: pending.actionTarget || getNotificationFocus(pending.notificationType),
                 });
             }, 150);
         }
@@ -591,8 +602,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // On ne l'écrase pas si une destination plus riche (avec type de notification) existe déjà.
         const currentMatch = window.location.hash.match(/^#desire\/([0-9a-f-]{36})(?:[?&](.*))?$/i);
         if (currentMatch && !readPendingDestination()) {
-            const notifType = new URLSearchParams(currentMatch[2] || '').get('notification') || '';
-            rememberPendingDestination(currentMatch[1], notifType);
+            const params = new URLSearchParams(currentMatch[2] || '');
+            rememberPendingDestination(
+                currentMatch[1],
+                params.get('notification') || '',
+                params.get('notification_action') || '',
+            );
         }
         navigateTo('login');
         setTimeout(() => {
@@ -713,4 +728,4 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('filter-toggled', (e) => {
         console.log('Filter toggled:', (e as CustomEvent).detail);
     });
-});
+}

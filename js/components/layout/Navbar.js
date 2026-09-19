@@ -1,6 +1,11 @@
+import { shouldShowCreateHint, dismissCreateHint } from '../../utils/createHint.js';
+
 export class Navbar extends HTMLElement {
     connectedCallback() {
         this._focusDebounce = null;
+        this._createHintTimer = null;
+        this._createHintAutoHide = null;
+        this._createHintShown = false;
         this._onVisibilityChange = () => {
             if (!document.hidden) this.refreshBadge();
         };
@@ -26,7 +31,9 @@ export class Navbar extends HTMLElement {
                 <button class="nav-btn active" title="Accueil" aria-label="Retour à l'accueil"><i
                         class="material-icons-round">home</i></button>
                 <button class="nav-btn" title="Ajouter" aria-label="Créer une nouvelle envie"><i
-                        class="material-icons-round">add_circle_outline</i></button>
+                        class="material-icons-round">add_circle_outline</i>
+                    <span class="create-hint" id="createHint" aria-hidden="true">Crée une envie</span>
+                </button>
                 <button class="nav-btn" title="Notifications" aria-label="Vos notifications" style="position: relative;"><i
                         class="material-icons-round">notifications_none</i>
                     <span class="notif-badge" id="notifBadge" style="display: none;">0</span>
@@ -37,6 +44,9 @@ export class Navbar extends HTMLElement {
         `;
 
         this.setupEventListeners();
+
+        // Accroche de création (pulsation + bulle), une seule fois
+        this._maybeShowCreateHint();
 
         // Plusieurs passes : token / API parfois prêts après le 1er tick (évite badge absent sans F5)
         this._scheduleBadgeRetries([0, 350, 900, 2000, 4000]);
@@ -51,8 +61,49 @@ export class Navbar extends HTMLElement {
     disconnectedCallback() {
         if (this._badgeInterval) clearInterval(this._badgeInterval);
         if (this._focusDebounce) clearTimeout(this._focusDebounce);
+        if (this._createHintTimer) clearTimeout(this._createHintTimer);
+        if (this._createHintAutoHide) clearTimeout(this._createHintAutoHide);
         document.removeEventListener('visibilitychange', this._onVisibilityChange);
         window.removeEventListener('focus', this._onWindowFocus);
+    }
+
+    /** Accroche de création : pulsation + bulle, montrée une seule fois. */
+    _maybeShowCreateHint() {
+        if (!shouldShowCreateHint()) return;
+        // Laisser l'arrivée se poser avant d'attirer l'œil sur le bouton.
+        this._createHintTimer = setTimeout(() => this._showCreateHint(), 1400);
+    }
+
+    _showCreateHint() {
+        // Hors accueil la navbar est masquée (display: none) : on n'affiche rien.
+        if (!this.isConnected || getComputedStyle(this).display === 'none') return;
+        const btn = this.querySelector('.nav-btn[title="Ajouter"]');
+        const hint = this.querySelector('#createHint');
+        if (!btn || !hint) return;
+
+        const reduceMotion = typeof window !== 'undefined'
+            && typeof window.matchMedia === 'function'
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!reduceMotion) btn.classList.add('hint-pulse');
+        hint.classList.add('is-visible');
+
+        this._createHintShown = true;
+        this._createHintAutoHide = setTimeout(() => this._hideCreateHint(), 6000);
+    }
+
+    /** Referme l'accroche et la mémorise comme vue (jamais revue ensuite). */
+    _hideCreateHint() {
+        if (!this._createHintShown) return; // jamais affichée : ne rien mémoriser
+        this._createHintShown = false;
+        if (this._createHintAutoHide) {
+            clearTimeout(this._createHintAutoHide);
+            this._createHintAutoHide = null;
+        }
+        const btn = this.querySelector('.nav-btn[title="Ajouter"]');
+        const hint = this.querySelector('#createHint');
+        if (btn) btn.classList.remove('hint-pulse');
+        if (hint) hint.classList.remove('is-visible');
+        dismissCreateHint();
     }
 
     /** Rafraîchit le badge à plusieurs intervalles (ex. après login ou au chargement). */
@@ -78,6 +129,9 @@ export class Navbar extends HTMLElement {
                         composed: true
                     });
                     this.dispatchEvent(event);
+
+                    // Toute navigation referme l'accroche de création.
+                    this._hideCreateHint();
 
                     this.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');

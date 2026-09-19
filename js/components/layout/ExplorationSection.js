@@ -18,6 +18,13 @@ export class ExplorationSection extends HTMLElement {
         this._currentPage = 1;
         this._hasMore = true;
         this._loadMoreObserver = null;
+        // Contexte pays : l'affichage est suspendu tant qu'il n'est pas résolu (VIS-09).
+        this._countryContext = null;
+        this._countryResolved = false;
+        // Requête de catalogue en cours, invalidée à chaque changement de pays (VIS-11).
+        this._desiresAbort = null;
+        // Numéro de la résolution pays courante : ignore les résolutions obsolètes.
+        this._countryResolveSeq = 0;
         // Note: _myUserId n'est pas caché ici, il est lu depuis le localStorage à chaque loadDesires
     }
 
@@ -64,8 +71,7 @@ export class ExplorationSection extends HTMLElement {
 
         this.setupStickyObserver();
         this.setupListeners();
-        this._loadCategoryPills();
-        this.loadDesires();
+        this._resolveCountryThenLoad();
         this.setupInfiniteScroll();
     }
 
@@ -74,6 +80,141 @@ export class ExplorationSection extends HTMLElement {
             this._loadMoreObserver.disconnect();
             this._loadMoreObserver = null;
         }
+        this._desiresAbort?.abort();
+        this._desiresAbort = null;
+    }
+
+    /**
+     * Résout le pays avant tout chargement : aucun catalogue mondial ne doit
+     * apparaître, même brièvement (VIS-09). En cas de choix nécessaire ou
+     * d'échec de résolution, on propose le sélecteur de pays au lieu de charger.
+     */
+    async _resolveCountryThenLoad() {
+        const seq = ++this._countryResolveSeq;
+        let ctx = null;
+        try {
+            const { api } = await import('../../api.js');
+            ctx = await api.getCountryContext();
+        } catch (err) {
+            console.warn('[ExplorationSection] Contexte pays indisponible:', err.message);
+        }
+        // Une résolution plus récente a pris le relais : on abandonne celle-ci.
+        if (seq !== this._countryResolveSeq) return;
+
+        if (!ctx || ctx.needs_choice || !ctx.country_code) {
+            this._countryResolved = false;
+            this._renderCountryChooser(ctx ? null : 'Impossible de déterminer votre pays pour le moment.');
+            return;
+        }
+
+        this._countryContext = ctx;
+        this._countryResolved = true;
+        const banner = this.querySelector('#countryContextBanner');
+        if (banner) banner.remove();
+        await this._loadCategoryPills();
+        await this.loadDesires();
+    }
+
+    /** Affiche le sélecteur de pays (VIS-09, GEO-08, GEO-09). */
+    async _renderCountryChooser(notice = '') {
+        const grid = this.querySelector('#explorationGrid');
+        if (!grid) return;
+        const filters = this.querySelector('#explorationFilters');
+        if (filters) filters.style.display = 'none';
+        const loadMoreArea = this.querySelector('#loadMoreArea');
+        if (loadMoreArea) loadMoreArea.style.display = 'none';
+
+        grid.innerHTML = `
+            <div style="text-align: center; padding: 48px 20px; grid-column: 1 / -1;">
+                <i class="material-icons-round" style="font-size: 48px; opacity: 0.4; display: block; margin-bottom: 12px;">public</i>
+                <p style="font-weight: 600; margin-bottom: 8px;">Choisissez votre pays pour voir les activités disponibles</p>
+                <p id="countryChooserNotice" style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;${notice ? '' : ' display: none;'}">${notice}</p>
+                <select id="countryContextSelect" style="min-width: 260px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-main); font-size: 15px;">
+                    <option value="">Chargement des pays...</option>
+                </select>
+            </div>`;
+
+        const select = grid.querySelector('#countryContextSelect');
+        let countries = [];
+        try {
+            const { api } = await import('../../api.js');
+            countries = await api.getCountries();
+        } catch (err) {
+            console.warn('[ExplorationSection] Pays non chargés:', err.message);
+        }
+
+        select.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = countries.length ? 'Sélectionnez un pays' : 'Aucun pays disponible';
+        select.appendChild(placeholder);
+        countries
+            .filter((c) => c && c.code && c.is_active !== false)
+            .forEach((c) => {
+                const option = document.createElement('option');
+                option.value = c.code;
+                option.textContent = c.label || c.code;
+                select.appendChild(option);
+            });
+
+        select.addEventListener('change', async () => {
+            const code = select.value;
+            if (!code) return;
+            select.disabled = true;
+            try {
+                const { api } = await import('../../api.js');
+                await api.setCountryContext(code);
+                this._resetFiltersAfterCountryChange();
+                document.dispatchEvent(new CustomEvent('country-context-changed', {
+                    detail: { country_code: code, source: 'exploration' },
+                    bubbles: true,
+                    composed: true,
+                }));
+                // Recharge complète une fois le pays confirmé.
+                this._countryContext = null;
+                this._countryResolved = false;
+                if (filters) filters.style.display = '';
+                grid.innerHTML = this._skeletons(3);
+                await this._resolveCountryThenLoad();
+            } catch (err) {
+                console.warn('[ExplorationSection] Choix du pays échoué:', err.message);
+                select.disabled = false;
+                const noticeEl = grid.querySelector('#countryChooserNotice');
+                if (noticeEl) {
+                    noticeEl.textContent = 'Le pays n\'a pas pu être enregistré. Réessayez.';
+                    noticeEl.style.display = '';
+                }
+            }
+        });
+    }
+
+    /** Un changement de pays rend les filtres courants incohérents (VIS-04). */
+    _resetFiltersAfterCountryChange() {
+        this._activeFilters = {};
+        this._activeCategory = null;
+        this._syncCategoryPillsUi();
+        this.querySelector('#explorationFilters')?.querySelectorAll('.category-pill').forEach((p) => {
+            const isTous = (p.dataset.category ?? '') === '';
+            if (isTous) p.setAttribute('active', '');
+            else p.removeAttribute('active');
+        });
+    }
+
+    /**
+     * Re-résout le pays puis recharge (connexion, déconnexion, changement de
+     * compte) : les réponses du contexte précédent ne doivent pas resservir
+     * (VIS-10). Pendant la résolution, tout chargement est suspendu (VIS-09).
+     */
+    async refreshCountryContext() {
+        this._countryResolved = false;
+        this._desiresAbort?.abort();
+        this._desiresAbort = null;
+        this._loading = false;
+        const filters = this.querySelector('#explorationFilters');
+        if (filters) filters.style.display = '';
+        const grid = this.querySelector('#explorationGrid');
+        if (grid) grid.innerHTML = this._skeletons(3);
+        await this._resolveCountryThenLoad();
     }
 
     _skeletons(n) {
@@ -136,12 +277,19 @@ export class ExplorationSection extends HTMLElement {
         if (!append) grid.innerHTML = '';
 
         if (desires.length === 0 && !append) {
+            // Catalogue national vide : état local, sans élargissement à d'autres pays (VIS-08).
             grid.innerHTML = `
                 <div style="text-align: center; padding: 60px 20px; color: var(--text-muted); grid-column: 1 / -1;">
                     <i class="material-icons-round" style="font-size: 48px; opacity: 0.3; display: block; margin-bottom: 12px;">search_off</i>
-                    <p>Aucune envie dans cette catégorie pour le moment.</p>
+                    <p>Aucune activité disponible dans votre pays pour le moment.</p>
                     <p style="font-size: 13px; margin-top: 4px;">Soyez le premier à en créer une !</p>
+                    <button id="emptyCreateBtn" style="margin-top: 16px; background: var(--primary, #6c5ce7); color: #fff; border: none; padding: 12px 28px; border-radius: 100px; font-weight: 600; cursor: pointer;">
+                        Créer une activité
+                    </button>
                 </div>`;
+            grid.querySelector('#emptyCreateBtn')?.addEventListener('click', () => {
+                document.dispatchEvent(new CustomEvent('navigate-creation', { bubbles: true, composed: true }));
+            });
             return;
         }
 
@@ -208,9 +356,18 @@ export class ExplorationSection extends HTMLElement {
     }
 
     async loadDesires(append = false) {
+        // Aucun chargement tant que le pays n'est pas résolu (VIS-09).
+        if (!this._countryResolved) return;
         if (this._loading) return;
         if (append && !this._hasMore) return;
         this._loading = true;
+        // Un chargement initial remplace le précédent : on invalide la requête
+        // en vol pour ignorer toute réponse tardive d'un ancien pays (VIS-11).
+        if (!append || !this._desiresAbort) {
+            this._desiresAbort?.abort();
+            this._desiresAbort = new AbortController();
+        }
+        const controller = this._desiresAbort;
         if (!append) {
             this._currentPage = 1;
             this._hasMore = true;
@@ -241,7 +398,9 @@ export class ExplorationSection extends HTMLElement {
                 this._pageSize,
             );
 
-            const data = await api.fetchDesires(filters);
+            const data = await api.fetchDesires(filters, { signal: controller.signal });
+            // Réponse d'un pays/chargement devenu obsolète : on la jette (VIS-11).
+            if (controller !== this._desiresAbort || controller.signal.aborted) return;
             const { items: desires, hasMore } = this._extractPagedItems(data);
             this._hasMore = hasMore;
 
@@ -264,6 +423,8 @@ export class ExplorationSection extends HTMLElement {
             }
 
         } catch (err) {
+            // Requête annulée volontairement : aucune erreur à afficher (VIS-11).
+            if (err && err.name === 'AbortError') return;
             console.warn('Chargement des envies échoué:', err.message);
             if (!append) {
                 this.querySelector('#explorationGrid').innerHTML = `
@@ -274,8 +435,10 @@ export class ExplorationSection extends HTMLElement {
                 `;
             }
         } finally {
-            this._loading = false;
-            this._updateLoadMoreUi();
+            if (controller === this._desiresAbort) {
+                this._loading = false;
+                this._updateLoadMoreUi();
+            }
         }
     }
 
@@ -398,11 +561,28 @@ export class ExplorationSection extends HTMLElement {
             }
             this.loadDesires();
         });
+
+        // Le contexte pays est lié au compte : une connexion ou une perte de
+        // session impose une re-résolution, les réponses précédentes étant
+        // rattachées à un autre contexte (VIS-10).
+        window.addEventListener('user-logged-in', () => this.refreshCountryContext());
+        window.addEventListener('auth-required', () => this.refreshCountryContext());
+        window.addEventListener('navigate-login', () => this.refreshCountryContext());
+
+        // Changement de pays décidé ailleurs (ex. profil) : on se réaligne.
+        // Notre propre choix est déjà suivi de rechargement, on l'ignore.
+        document.addEventListener('country-context-changed', (e) => {
+            if (e.detail?.source === 'exploration') return;
+            this._resetFiltersAfterCountryChange();
+            this.refreshCountryContext();
+        });
     }
 
     async _loadCategoryPills() {
         const container = this.querySelector('#explorationFilters');
         if (!container) return;
+        // Repartir d'une base propre : un changement de pays recharge les pills.
+        container.querySelectorAll('.category-pill').forEach((p) => p.remove());
         const loading = container.querySelector('#categoryPillsLoading');
         const divider = container.querySelector('div[style*="1px"]');
 
