@@ -11,6 +11,8 @@ const NOTIFICATION_TYPES = {
     reminder_soon: { icon: 'directions_run', color: '#f59e0b', label: 'Départ bientôt' },
     desire_updated: { icon: 'edit_calendar', color: '#6366f1', label: 'Modification importante' },
     desire_cancelled: { icon: 'event_busy', color: '#ef4444', label: 'Activité annulée' },
+    popular_desire: { icon: 'trending_up', color: '#f59e0b', label: 'Envie populaire' },
+    dormant_user: { icon: 'waving_hand', color: '#6366f1', label: 'Ça fait un moment' },
 };
 
 export function getNotificationMeta(type) {

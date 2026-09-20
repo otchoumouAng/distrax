@@ -68,17 +68,22 @@ function extractPushData(payload = {}) {
 const NOTIFICATION_ACTIONS = {
     join_request: { label: 'Voir et répondre', target: 'participant-requests' },
     join_accepted: { label: 'Confirmer ma présence', target: 'confirm-presence' },
-    join_rejected: { label: "Voir d'autres envies", target: '' },
+    join_rejected: { label: "Voir d'autres envies", target: 'page:catalogue' },
     presence_confirm: { label: 'Je confirme', target: 'confirm-presence' },
     organizer_keep: { label: "Maintenir l'activité", target: 'maintenance' },
     reminder_day: { label: 'Voir les détails', target: 'practical-info' },
     reminder_soon: { label: "Voir l'itinéraire", target: 'practical-info' },
     desire_updated: { label: 'Voir la modification', target: 'practical-info' },
     desire_cancelled: { label: "Voir d'autres envies", target: '' },
-    post_activity: { label: 'Donner mon retour', target: '' },
-    republish: { label: 'Reprogrammer', target: '' },
-    recommendation: { label: 'Découvrir', target: '' },
-    new_desire: { label: 'Découvrir', target: '' },
+    // `post_activity` ne porte pas d'appel à l'action : aucun écran ne recueille
+    // encore le retour d'expérience.
+    republish: { label: 'Reprogrammer', target: 'page:create-republish' },
+    recommendation: { label: 'Découvrir', target: 'page:catalogue' },
+    new_desire: { label: 'Découvrir', target: 'page:catalogue' },
+    // Envie devenue populaire d'elle-même : l'action ouvre l'envie concernée.
+    popular_desire: { label: "Voir l'envie", target: 'practical-info' },
+    // Relance d'un compte dormant : le formulaire de création s'ouvre vierge.
+    dormant_user: { label: 'Publier une envie', target: 'page:create' },
 };
 
 const ACTION_BUTTON_ID = 'cta';
@@ -118,15 +123,24 @@ function resolveTargetUrl(data, actionTarget = '') {
     const hasValidNotificationId = DESIRE_ID_PATTERN.test(notificationId);
     const hasValidType = /^[a-z_]{1,64}$/i.test(data.type || '');
 
-    if (/^#desire\/[0-9a-f-]{36}(?:\?.*)?$/i.test(target.hash) && (hasValidType || hasValidNotificationId)) {
+    const params = new URLSearchParams();
+    if (hasValidType) params.set('notification', data.type);
+    if (hasValidNotificationId) params.set('notification_id', notificationId);
+    // L'étape choisie par un bouton natif doit survivre à l'ouverture d'une
+    // nouvelle fenêtre : elle voyage donc dans le hash comme le type.
+    if (actionTarget) params.set('notification_action', actionTarget);
+
+    const hasDesireHash = /^#desire\/[0-9a-f-]{36}(?:\?.*)?$/i.test(target.hash);
+    if (hasDesireHash && (hasValidType || hasValidNotificationId)) {
         const [route, query = ''] = target.hash.split('?', 2);
-        const params = new URLSearchParams(query);
-        if (hasValidType) params.set('notification', data.type);
-        if (hasValidNotificationId) params.set('notification_id', notificationId);
-        // L'étape choisie par un bouton natif doit survivre à l'ouverture d'une
-        // nouvelle fenêtre : elle voyage donc dans le hash comme le type.
-        if (actionTarget) params.set('notification_action', actionTarget);
-        target.hash = `${route}?${params}`;
+        const merged = new URLSearchParams(query);
+        params.forEach((value, key) => merged.set(key, value));
+        target.hash = `${route}?${merged}`;
+    } else if (!hasDesireHash && params.has('notification_action')) {
+        // Relance sans envie rattachée (compte dormant) : faute d'ancre de
+        // détail, l'appel à l'action voyage dans le hash de l'accueil pour être
+        // traité au démarrage à froid.
+        target.hash = `#home?${params}`;
     }
 
     return target.href;

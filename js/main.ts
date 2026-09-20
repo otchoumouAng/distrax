@@ -6,7 +6,7 @@ import { api } from './api.js';
 import { escapeHtml } from './utils/escapeHtml.js';
 import * as sessionManager from './utils/sessionManager.js';
 import { initFirebase, registerDeviceForExistingPermission } from './utils/firebaseConfig.js';
-import { getNotificationFocus, resolvePushTarget } from './utils/pushNavigation.js';
+import { getNotificationFocus, getPageTarget, isPageTarget, resolvePushTarget } from './utils/pushNavigation.js';
 import { captureInstallPrompt, offerInstallBanner } from './utils/installPWA.js';
 
 // Pages accessibles sans être connecté
@@ -217,6 +217,40 @@ export function initializeApp() {
 
     function clearPendingDestination() {
         try { sessionStorage.removeItem(PENDING_DESTINATION_KEY); } catch { /* ignore */ }
+    }
+
+    /**
+     * Ouvre la page visée par un appel à l'action `page:…` (CDC §11).
+     *
+     * Trois cas : revenir au flux pour chercher une autre envie, rouvrir le
+     * formulaire de création en mode republication, ou l'ouvrir vierge pour une
+     * relance. Retourne faux quand la cible n'est pas une page connue :
+     * l'appelant garde alors son comportement habituel (ouvrir l'envie liée).
+     */
+    function openPageTarget(actionTarget: string, desireId = ''): boolean {
+        const page = getPageTarget(actionTarget);
+        if (page === 'catalogue') {
+            // Refus, recommandation ou nouvelle envie : ne pas rester sur
+            // l'envie quittée, revenir au flux pour en découvrir une autre.
+            navigateTo('home');
+            return true;
+        }
+        if (page === 'create-republish') {
+            if (desireId && creationPage) {
+                (creationPage as any)._pendingEdit = { editMode: true, desireId };
+            }
+            guardedNavigate('creation');
+            return true;
+        }
+        if (page === 'create') {
+            // Relance d'un compte dormant : formulaire vierge, sans rapport avec
+            // une envie passée — on efface une éventuelle republication en
+            // attente issue d'un parcours précédent.
+            if (creationPage) (creationPage as any)._pendingEdit = null;
+            guardedNavigate('creation');
+            return true;
+        }
+        return false;
     }
 
     function _doNavigate(pageId: string) {
@@ -435,14 +469,29 @@ export function initializeApp() {
             if (initialNotificationId && api.isAuthenticated()) {
                 api.trackNotificationOpen(initialNotificationId).catch(() => {});
             }
+            const coldStartTarget = initialNotificationAction || getNotificationFocus(initialNotificationType);
             setTimeout(() => {
+                // Un appel à l'action `page:…` ouvre directement la page visée
+                // (catalogue, republication) plutôt que l'envie liée.
+                if (openPageTarget(coldStartTarget, _desireIdFromLink)) return;
                 history.pushState({ page: 'home', overlay: true }, '', '#home');
                 desireDetailsPage?.open?.({
                     id: _desireIdFromLink,
                     notificationType: initialNotificationType,
-                    focus: initialNotificationAction || getNotificationFocus(initialNotificationType),
+                    focus: coldStartTarget,
                 });
             }, 150);
+        } else {
+            // Relance sans envie rattachée (compte dormant) : aucune ancre de
+            // détail, seul l'appel à l'action conservé dans le hash permet
+            // d'ouvrir la bonne page au démarrage à froid.
+            const coldStartPage = initialNotificationAction || getNotificationFocus(initialNotificationType) || '';
+            if (isPageTarget(coldStartPage)) {
+                if (initialNotificationId && api.isAuthenticated()) {
+                    api.trackNotificationOpen(initialNotificationId).catch(() => {});
+                }
+                setTimeout(() => openPageTarget(coldStartPage), 150);
+            }
         }
 
         // Précharger les feature flags dès le démarrage pour des vérifications synchrones ultérieures
@@ -494,6 +543,14 @@ export function initializeApp() {
             return;
         }
 
+        // L'étape choisie depuis un bouton natif Android prime sur la cible par
+        // défaut du type de notification (CDC §11).
+        const actionTarget = target.actionTarget || getNotificationFocus(target.type);
+
+        // Un appel à l'action `page:…` ouvre une page de l'application, pas
+        // l'envie liée.
+        if (openPageTarget(actionTarget, target.desireId)) return;
+
         if (target.desireId) {
             // Mémoriser la destination pour la restaurer si une ré-authentification est requise.
             rememberPendingDestination(target.desireId, target.type, target.actionTarget);
@@ -509,9 +566,7 @@ export function initializeApp() {
             await desireDetailsPage?.open?.({
                 id: target.desireId,
                 notificationType: target.type,
-                // L'étape choisie depuis un bouton natif Android prime sur la cible
-                // par défaut du type de notification (CDC §11).
-                focus: target.actionTarget || getNotificationFocus(target.type),
+                focus: actionTarget,
             });
             return;
         }
@@ -584,12 +639,14 @@ export function initializeApp() {
         const pending = readPendingDestination();
         if (pending) {
             clearPendingDestination();
+            const pendingTarget = pending.actionTarget || getNotificationFocus(pending.notificationType);
             setTimeout(() => {
+                if (openPageTarget(pendingTarget, pending.id)) return;
                 history.pushState({ page: 'home', overlay: true }, '', `#desire/${pending.id}`);
                 desireDetailsPage?.open?.({
                     id: pending.id,
                     notificationType: pending.notificationType,
-                    focus: pending.actionTarget || getNotificationFocus(pending.notificationType),
+                    focus: pendingTarget,
                 });
             }, 150);
         }
@@ -685,7 +742,11 @@ export function initializeApp() {
     });
 
     window.addEventListener('view-desire', (e) => {
-        desireDetailsPage?.open?.((e as CustomEvent).detail);
+        const detail = ((e as CustomEvent).detail || {}) as { focus?: string; id?: string };
+        // Un appel à l'action `page:…` (historique des notifications) ouvre la
+        // page visée plutôt que le détail de l'envie.
+        if (openPageTarget(detail.focus || '', detail.id || '')) return;
+        desireDetailsPage?.open?.(detail);
         // Pousser un état pour que le 1er retour ferme l'overlay et le 2e retour aille à la page précédente
         history.pushState({ page: _currentPageId, overlay: true }, '', `#${_currentPageId}`);
     });

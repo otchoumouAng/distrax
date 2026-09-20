@@ -4,6 +4,8 @@ import {
     extractPushData,
     getNotificationAction,
     getNotificationFocus,
+    getPageTarget,
+    isPageTarget,
     isParticipantRequestNotification,
     isValidDesireId,
     resolveNotificationAction,
@@ -144,12 +146,32 @@ describe('push notification helpers', () => {
         expect(getNotificationFocus('desire_updated')).toBe('practical-info');
     });
 
+    it('route vers une page les actions qui ne visent pas une étape du détail', () => {
+        expect(getNotificationFocus('join_rejected')).toBe('page:catalogue');
+        expect(getNotificationFocus('new_desire')).toBe('page:catalogue');
+        expect(getNotificationFocus('recommendation')).toBe('page:catalogue');
+        expect(getNotificationFocus('republish')).toBe('page:create-republish');
+    });
+
     it('retourne null pour les types sans cible ou inconnus', () => {
-        expect(getNotificationFocus('join_rejected')).toBeNull();
         expect(getNotificationFocus('desire_cancelled')).toBeNull();
-        expect(getNotificationFocus('new_desire')).toBeNull();
+        expect(getNotificationFocus('post_activity')).toBeNull();
         expect(getNotificationFocus('type_inconnu')).toBeNull();
         expect(getNotificationFocus(undefined)).toBeNull();
+    });
+});
+
+describe('cibles « page: » (CDC §11)', () => {
+    it('reconnaît une page et en extrait le nom', () => {
+        expect(isPageTarget('page:catalogue')).toBe(true);
+        expect(getPageTarget('page:create-republish')).toBe('create-republish');
+    });
+
+    it('ne confond pas une ancre du détail avec une page', () => {
+        expect(isPageTarget('participant-requests')).toBe(false);
+        expect(getPageTarget('participant-requests')).toBe('');
+        expect(isPageTarget('')).toBe(false);
+        expect(isPageTarget(undefined)).toBe(false);
     });
 });
 
@@ -163,11 +185,15 @@ describe('appel à l’action unique (CDC §11)', () => {
             label: 'Confirmer ma présence',
             target: 'confirm-presence',
         });
-        expect(getNotificationAction('new_desire')).toEqual({ label: 'Découvrir', target: '' });
+        expect(getNotificationAction('new_desire')).toEqual({ label: 'Découvrir', target: 'page:catalogue' });
+        expect(getNotificationAction('republish')).toEqual({ label: 'Reprogrammer', target: 'page:create-republish' });
+        expect(getNotificationAction('dormant_user')).toEqual({ label: 'Publier une envie', target: 'page:create' });
+        expect(getNotificationAction('popular_desire')).toEqual({ label: "Voir l'envie", target: 'practical-info' });
     });
 
-    it('ne propose aucune action pour un type inconnu', () => {
+    it('ne propose aucune action pour un type inconnu ou sans action', () => {
         expect(getNotificationAction('type_inconnu')).toBeNull();
+        expect(getNotificationAction('post_activity')).toBeNull();
         expect(getNotificationAction(undefined)).toBeNull();
     });
 
@@ -191,7 +217,7 @@ describe('appel à l’action unique (CDC §11)', () => {
             label: "Voir l'itinéraire",
             target: 'practical-info',
         });
-        expect(resolveNotificationAction('new_desire')).toEqual({ label: 'Découvrir', target: '' });
+        expect(resolveNotificationAction('new_desire')).toEqual({ label: 'Découvrir', target: 'page:catalogue' });
     });
 
     it('retourne null lorsque aucune action n’est connue', () => {

@@ -98,7 +98,7 @@ describe('navigation vers une envie liée', () => {
         expect(getRelatedDesireId({ desireId: 'root-camel' })).toBe('root-camel');
     });
 
-    it.each(['new_desire', 'desire_cancelled', 'future_type', 'recommendation'])(
+    it.each(['desire_cancelled', 'future_type'])(
         'ouvre toute notification liée sans cible connue, y compris le type %s',
         type => {
             expect(getNotificationNavigation({ type, related_desire_id: 'desire-42' })).toEqual({
@@ -108,12 +108,25 @@ describe('navigation vers une envie liée', () => {
     );
 
     it.each([
+        ['new_desire', 'page:catalogue'],
+        ['recommendation', 'page:catalogue'],
+        ['join_rejected', 'page:catalogue'],
+        ['republish', 'page:create-republish'],
+    ])('transmet la page visée par le type %s', (type, focus) => {
+        expect(getNotificationNavigation({ type, related_desire_id: 'desire-42' })).toEqual({
+            id: 'desire-42',
+            focus,
+        });
+    });
+
+    it.each([
         ['join_request', 'participant-requests'],
         ['join_accepted', 'confirm-presence'],
         ['presence_confirm', 'confirm-presence'],
         ['reminder_day', 'practical-info'],
         ['reminder_soon', 'practical-info'],
         ['desire_updated', 'practical-info'],
+        ['popular_desire', 'practical-info'],
     ])('ouvre l’action exacte attendue pour le type %s', (type, focus) => {
         expect(getNotificationNavigation({ type, related_desire_id: 'desire-42' })).toEqual({
             id: 'desire-42',
@@ -139,9 +152,9 @@ describe('navigation vers une envie liée', () => {
 
     it('ouvre l’envie sans étape lorsqu’un libellé est fourni sans cible', () => {
         expect(getNotificationNavigation({
-            type: 'new_desire',
+            type: 'desire_cancelled',
             related_desire_id: 'desire-42',
-            action_label: 'Découvrir',
+            action_label: "Voir d'autres envies",
         })).toEqual({ id: 'desire-42' });
     });
 });

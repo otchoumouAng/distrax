@@ -4,7 +4,8 @@
  * Huit écrans dans une seule page, dans l'ordre où l'exploitation les
  * consulte : l'état de la file d'envoi, les interrupteurs du moteur et la
  * fenêtre d'envoi paramétrable (MNO-15), le mode de gratuité du ciblage, le
- * catalogue des référentiels (MNO-17), les campagnes de notification (MNO-18),
+ * catalogue des référentiels (MNO-17), les textes des notifications rédigés
+ * depuis la console, les campagnes de notification (MNO-18),
  * la liste filtrée des comptes (MNO-19) avec leur blocage (MNO-19a),
  * l'engagement (statistiques de ♥), puis la recherche d'un compte — avec, pour
  * ce dernier, son journal de livraison (MNO-12b), son diagnostic (MNO-13) et
@@ -107,11 +108,14 @@ const AUDIENCE_HINTS = {
 
 const CHANNEL_LABELS = { push: 'Notification push' };
 
-/** Étapes de l'application qu'un CTA de campagne peut ouvrir (valeurs du back). */
+/** Étapes de l'application qu'un CTA peut ouvrir (valeurs du back). */
 const ACTION_TARGET_LABELS = {
     'participant-requests': 'Demandes de participation',
     'confirm-presence': 'Confirmation de présence',
     'practical-info': 'Informations pratiques',
+    'page:catalogue': 'Chercher d’autres envies',
+    'page:create': 'Publier une envie',
+    'page:create-republish': 'Republier une envie',
 };
 
 /**
@@ -136,6 +140,12 @@ const ADMIN_SECTIONS = [
         icon: 'category',
         label: 'Référentiels',
         hint: 'Catégories, communes, prix, paiement, boost.',
+    },
+    {
+        key: 'templates',
+        icon: 'edit_note',
+        label: 'Textes',
+        hint: 'Variantes rédigées des notifications du moteur.',
     },
     {
         key: 'campaigns',
@@ -193,6 +203,8 @@ export class AdminPage extends HTMLElement {
         this._searchResults = [];
         this._catalogs = [];
         this._catalogKey = null;
+        this._templateTypes = [];
+        this._templates = [];
         this._campaignOptions = { channels: [], audience_modes: [], action_targets: [] };
         this._campaignAudience = 'all';
         this._campaignPicked = new Map();
@@ -286,6 +298,60 @@ export class AdminPage extends HTMLElement {
                             <span class="admin-placeholder">Chargement…</span>
                         </div>
                         <div id="adminCatalogBody"></div>
+                    </div>
+
+                    <!-- Textes des notifications -->
+                    <div class="admin-card" data-admin-section="templates" hidden>
+                        <h3 class="admin-card-title">
+                            <i class="material-icons-round">edit_note</i> Textes
+                        </h3>
+                        <p class="admin-card-hint">
+                            Le moteur tourne d’une variante à l’autre sans répéter la
+                            dernière servie ; un type sans variante garde son texte par
+                            défaut. Une variable s’écrit entre accolades — les valeurs
+                            montrées sont des exemples, elles ne partent jamais.
+                        </p>
+
+                        <form id="adminTemplateForm" class="admin-campaign-form">
+                            <div class="admin-setting-row">
+                                <label class="admin-setting-text" for="adminTemplateType">
+                                    <span class="admin-setting-label">Type de notification</span>
+                                    <span class="admin-setting-hint">
+                                        L’envoi auquel la variante s’ajoute.
+                                    </span>
+                                </label>
+                                <select class="form-input admin-template-input"
+                                        id="adminTemplateType"></select>
+                            </div>
+                            <div id="adminTemplateVariables"></div>
+
+                            <div class="admin-template-field">
+                                <span class="admin-setting-label">Titre</span>
+                                <input class="form-input admin-template-input" id="adminTemplateTitle"
+                                       type="text" maxlength="200" placeholder="Titre de la notification"
+                                       autocomplete="off">
+                            </div>
+                            <div class="admin-template-field">
+                                <span class="admin-setting-label">Message</span>
+                                <textarea class="form-input admin-template-input admin-template-body"
+                                          id="adminTemplateBody" maxlength="2000" rows="3"
+                                          placeholder="Message"></textarea>
+                            </div>
+
+                            <div class="admin-campaign-actions">
+                                <button type="button" class="admin-test-btn" id="adminTemplatePreviewBtn">
+                                    <i class="material-icons-round">visibility</i> Aperçu
+                                </button>
+                                <button type="submit" class="admin-settings-save">
+                                    <i class="material-icons-round">add</i> Ajouter la variante
+                                </button>
+                            </div>
+                            <div id="adminTemplatePreview"></div>
+                        </form>
+
+                        <div id="adminTemplateList">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
                     </div>
 
                     <!-- Campagnes de notification (MNO-18) -->
@@ -513,6 +579,15 @@ export class AdminPage extends HTMLElement {
             }
         });
 
+        this.querySelector('#adminTemplateForm')?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            this._createTemplate();
+        });
+        this.querySelector('#adminTemplateType')
+            ?.addEventListener('change', () => this._renderTemplateVariables());
+        this.querySelector('#adminTemplatePreviewBtn')
+            ?.addEventListener('click', () => this._previewTemplateDraft());
+
         this.querySelector('#adminUserFilters')?.addEventListener('submit', (event) => {
             event.preventDefault();
             this._userFilters = { ...this._readUserFilters(), page: 1 };
@@ -635,6 +710,8 @@ export class AdminPage extends HTMLElement {
                 ]);
             case 'catalog':
                 return this._loadCatalog(this._takePrefetch('catalog'));
+            case 'templates':
+                return this._loadNotificationTemplates(this._takePrefetch('templates'));
             case 'campaigns':
                 return this._loadCampaigns(this._takePrefetch('campaigns'));
             case 'users':
@@ -666,15 +743,15 @@ export class AdminPage extends HTMLElement {
      */
     async _loadSummaries() {
         this._summary = {};
-        const [outbox, features, catalogs, campaigns, users, engagement] = await Promise.all([
+        const [outbox, features, catalogs, campaigns, users, engagement, templates] = await Promise.all([
             this._grab('outbox', () => api.getAdminOutbox()),
             this._grab('engine', () => api.getFeatures('notification')),
             this._grab('catalog', () => api.getAdminCatalog()),
             this._grab('campaigns', () => api.getAdminCampaigns()),
             this._grab('users', () => api.getAdminUsersDirectory({ page: 1 })),
             this._grab('engagement', () => api.getAdminStats()),
+            this._grab('templates', () => api.getAdminNotificationTemplates()),
         ]);
-
         const counts = outbox?.counts || {};
         const waiting = Number(counts.pending || 0);
         const failed = Number(counts.failed || 0);
@@ -698,6 +775,13 @@ export class AdminPage extends HTMLElement {
         this._setTileMetric('catalog', catalogsCount === undefined
             ? 'Indisponible'
             : `${formatCount(catalogsCount)} référentiel(s)`);
+
+        // Les variantes se comparent aux types : un type sans variante sert son
+        // texte par défaut, ce que le rapport laisse voir.
+        const typeCount = templates?.types?.length;
+        this._setTileMetric('templates', typeCount === undefined
+            ? 'Indisponible'
+            : `${formatCount(templates.templates?.length || 0)} variante(s) · ${formatCount(typeCount)} type(s)`);
 
         const list = campaigns?.campaigns || [];
         const running = list
@@ -1354,6 +1438,280 @@ export class AdminPage extends HTMLElement {
             this._toast(err.message, 'error');
         } finally {
             input.disabled = false;
+        }
+    }
+
+    // ─── Textes des notifications ────────────────────────────────────
+
+    /**
+     * Les types à texte éditorial et leurs variantes. Le serveur décrit les
+     * types, leurs variables et leurs textes par défaut ; la console ne sait
+     * d'eux que ce qu'il déclare, si bien qu'un type retiré du moteur disparaît
+     * de l'écran de lui-même.
+     */
+    async _loadNotificationTemplates(prefetched = null) {
+        const list = this.querySelector('#adminTemplateList');
+        if (!list) return;
+        try {
+            const data = prefetched || await api.getAdminNotificationTemplates();
+            this._templateTypes = data?.types || [];
+            this._templates = data?.templates || [];
+            this._renderTemplateTypeOptions();
+            this._renderTemplateVariables();
+            this._renderTemplateList();
+        } catch (err) {
+            list.innerHTML = this._error(err);
+        }
+    }
+
+    /** Le sélecteur reprend les types déclarés : aucun n'est écrit en dur ici. */
+    _renderTemplateTypeOptions() {
+        const select = this.querySelector('#adminTemplateType');
+        if (!select) return;
+        const previous = select.value;
+        select.innerHTML = this._templateTypes.map((type) => `
+            <option value="${escapeHtml(type.event_type)}">${escapeHtml(type.label)}</option>
+        `).join('');
+        if (previous && this._templateTypes.some(({ event_type }) => event_type === previous)) {
+            select.value = previous;
+        }
+    }
+
+    /** Le type ouvert, ou celui d'une variante donnée. */
+    _templateType(eventType = null) {
+        const key = eventType || this.querySelector('#adminTemplateType')?.value;
+        return this._templateTypes.find((type) => type.event_type === key) || null;
+    }
+
+    /**
+     * Variables autorisées du type ouvert, chacune avec sa valeur d'exemple :
+     * c'est ce que l'aperçu substituera, faute de quoi un marqueur resterait
+     * visible chez le destinataire.
+     */
+    _renderTemplateVariables() {
+        const container = this.querySelector('#adminTemplateVariables');
+        const type = this._templateType();
+        if (!container) return;
+        const variables = type?.variables || [];
+        container.innerHTML = `
+            ${type?.description ? `<p class="admin-card-hint">${escapeHtml(type.description)}</p>` : ''}
+            ${variables.length ? `
+                <div class="admin-chips">
+                    ${variables.map((variable) => `
+                        <span class="admin-chip">
+                            <b>{${escapeHtml(variable.name)}}</b>
+                            <span>${escapeHtml(variable.example)}</span>
+                        </span>
+                    `).join('')}
+                </div>
+            ` : this._message('Ce type ne prend aucune variable.')}
+        `;
+    }
+
+    /** Une entrée par type déclaré, ses variantes dessous. */
+    _renderTemplateList() {
+        const container = this.querySelector('#adminTemplateList');
+        if (!container) return;
+        if (!this._templateTypes.length) {
+            container.innerHTML = this._message('Aucun type de notification à texte.');
+            return;
+        }
+        container.innerHTML = `
+            <h4 class="admin-section-title">Variantes par type</h4>
+            ${this._templateTypes.map((type) => this._templateGroup(type)).join('')}
+        `;
+        container.querySelectorAll('.admin-template-row').forEach((row) => {
+            row.querySelector('.admin-template-save')
+                ?.addEventListener('click', () => this._saveTemplate(row));
+            row.querySelector('.admin-template-active')
+                ?.addEventListener('change', (event) => this._toggleTemplate(row, event.target));
+            row.querySelector('.admin-template-check')
+                ?.addEventListener('click', () => this._previewTemplateRow(row));
+        });
+    }
+
+    /** Le type, ses variantes et — s'il n'en a aucune — ce qui est servi à sa place. */
+    _templateGroup(type) {
+        const variants = this._templates.filter(({ event_type }) => event_type === type.event_type);
+        return `
+            <div class="admin-template-group">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(type.label)}</span>
+                    <span class="admin-badge">
+                        ${escapeHtml(variants.length ? `${variants.length} variante(s)` : 'Texte par défaut')}
+                    </span>
+                </div>
+                ${variants.length
+                    ? variants.map((variant) => this._templateRow(type, variant)).join('')
+                    : this._message('Aucune variante : le texte par défaut est servi.')}
+            </div>
+        `;
+    }
+
+    /** Une variante : son texte, son activation, sa sauvegarde et son aperçu. */
+    _templateRow(type, variant) {
+        const active = variant.is_active !== false;
+        return `
+            <div class="admin-catalog-entry admin-template-row ${active ? '' : 'is-inactive'}"
+                 data-template-id="${escapeHtml(String(variant.id))}"
+                 data-event-type="${escapeHtml(type.event_type)}">
+                <div class="admin-catalog-head">
+                    <span class="admin-catalog-key">${escapeHtml(variant.title || '—')}</span>
+                    <label class="admin-switch-row admin-catalog-toggle" title="Servie par le moteur">
+                        <input type="checkbox" class="admin-switch-input admin-template-active"
+                               ${active ? 'checked' : ''}>
+                        <span class="admin-switch-track"><span class="admin-switch-thumb"></span></span>
+                    </label>
+                </div>
+                <div class="admin-template-field">
+                    <span class="admin-setting-label">Titre</span>
+                    <input class="form-input admin-template-input" type="text" data-field="title"
+                           maxlength="200" value="${escapeHtml(variant.title || '')}">
+                </div>
+                <div class="admin-template-field">
+                    <span class="admin-setting-label">Message</span>
+                    <textarea class="form-input admin-template-input admin-template-body"
+                              data-field="body" maxlength="2000"
+                              rows="3">${escapeHtml(variant.body || '')}</textarea>
+                </div>
+                <div class="admin-campaign-actions">
+                    <button type="button" class="admin-test-btn admin-template-check">
+                        <i class="material-icons-round">visibility</i> Aperçu
+                    </button>
+                    <button type="button" class="admin-test-btn admin-template-save">
+                        <i class="material-icons-round">save</i> Enregistrer
+                    </button>
+                </div>
+                <div class="admin-template-slot"></div>
+            </div>
+        `;
+    }
+
+    /** Ajoute une variante au type ouvert. Le texte reste saisi : l'aperçu suit. */
+    async _createTemplate() {
+        const type = this._templateType();
+        const title = (this.querySelector('#adminTemplateTitle')?.value || '').trim();
+        const body = (this.querySelector('#adminTemplateBody')?.value || '').trim();
+        const feedback = this.querySelector('#adminTemplatePreview');
+        if (!type) {
+            if (feedback) feedback.innerHTML = this._message('Aucun type déclaré.', 'error');
+            return;
+        }
+        if (!title || !body) {
+            if (feedback) {
+                feedback.innerHTML = this._message('Un titre et un message sont nécessaires.', 'error');
+            }
+            return;
+        }
+
+        const button = this.querySelector('#adminTemplateForm button[type="submit"]');
+        if (button) button.disabled = true;
+        try {
+            const created = await api.createAdminNotificationTemplate({
+                event_type: type.event_type, title, body,
+            });
+            this._templates.push(created);
+            this._renderTemplateList();
+            if (feedback) feedback.innerHTML = '';
+            this._toast('Variante ajoutée');
+        } catch (err) {
+            if (feedback) feedback.innerHTML = this._error(err);
+        } finally {
+            if (button) button.disabled = false;
+        }
+    }
+
+    async _saveTemplate(row) {
+        const title = (row.querySelector('[data-field="title"]')?.value || '').trim();
+        const body = (row.querySelector('[data-field="body"]')?.value || '').trim();
+        const button = row.querySelector('.admin-template-save');
+        if (!title || !body) {
+            this._toast('Un titre et un message sont nécessaires', 'error');
+            return;
+        }
+
+        if (button) button.disabled = true;
+        try {
+            const saved = await api.updateAdminNotificationTemplate(
+                row.dataset.templateId, { title, body });
+            this._replaceTemplate(saved);
+            this._renderTemplateList();
+            this._toast('Variante enregistrée');
+        } catch (err) {
+            this._toast(err.message, 'error');
+        } finally {
+            if (button) button.disabled = false;
+        }
+    }
+
+    /** L'activation est l'action la plus fréquente : elle part sans confirmation. */
+    async _toggleTemplate(row, input) {
+        const wanted = input.checked;
+        input.disabled = true;
+        try {
+            const saved = await api.updateAdminNotificationTemplate(
+                row.dataset.templateId, { is_active: wanted });
+            this._replaceTemplate(saved);
+            row.classList.toggle('is-inactive', !wanted);
+            this._toast(wanted ? 'Variante servie' : 'Variante écartée');
+        } catch (err) {
+            input.checked = !wanted;
+            this._toast(err.message, 'error');
+        } finally {
+            input.disabled = false;
+        }
+    }
+
+    /** Une variante relue remplace celle gardée en mémoire, à sa place. */
+    _replaceTemplate(template) {
+        const index = this._templates.findIndex(({ id }) => id === template.id);
+        if (index === -1) this._templates.push(template);
+        else this._templates[index] = template;
+    }
+
+    /** Aperçu du texte en cours de rédaction, sans enregistrer ni envoyer. */
+    _previewTemplateDraft() {
+        const type = this._templateType();
+        return this._previewTemplate(
+            this.querySelector('#adminTemplatePreview'),
+            type?.event_type,
+            this.querySelector('#adminTemplateTitle')?.value || '',
+            this.querySelector('#adminTemplateBody')?.value || '',
+        );
+    }
+
+    /** Aperçu d'une variante enregistrée, tel que le destinataire le lirait. */
+    _previewTemplateRow(row) {
+        return this._previewTemplate(
+            row.querySelector('.admin-template-slot'),
+            row.dataset.eventType,
+            row.querySelector('[data-field="title"]')?.value || '',
+            row.querySelector('[data-field="body"]')?.value || '',
+        );
+    }
+
+    /**
+     * Le rendu vient du serveur, qui emploie le même moteur que les envois : les
+     * variables y prennent leur valeur d'exemple. Un texte laissé vide montre le
+     * défaut du type, ce qui permet d'inspecter un type avant d'avoir rien écrit.
+     */
+    async _previewTemplate(container, eventType, title, body) {
+        if (!container || !eventType) return;
+        container.innerHTML = '<span class="admin-placeholder">Aperçu…</span>';
+        try {
+            const rendered = await api.previewAdminNotificationTemplate({
+                event_type: eventType,
+                title: title.trim() || null,
+                body: body.trim() || null,
+            });
+            container.innerHTML = `
+                <div class="admin-template-preview-result">
+                    <span class="admin-journal-type">${escapeHtml(rendered.title)}</span>
+                    <p class="admin-campaign-message">${escapeHtml(rendered.body)}</p>
+                </div>
+            `;
+        } catch (err) {
+            container.innerHTML = this._error(err);
         }
     }
 

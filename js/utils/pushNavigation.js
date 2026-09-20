@@ -129,28 +129,53 @@ export function resolvePushTarget(payload, origin) {
 }
 
 /**
+ * Certaines actions ne conduisent pas à une étape du détail mais à une page
+ * entière de l'application : elles sont préfixées pour être reconnues sans
+ * confusion avec une ancre du détail (voir `catalog.py`).
+ */
+export const PAGE_TARGET_PREFIX = 'page:';
+
+/** Vrai si la cible désigne une page plutôt qu'une ancre du détail. */
+export function isPageTarget(target) {
+    return typeof target === 'string' && target.startsWith(PAGE_TARGET_PREFIX);
+}
+
+/** Nom de la page visée par une cible `page:…`, ou chaîne vide. */
+export function getPageTarget(target) {
+    return isPageTarget(target) ? target.slice(PAGE_TARGET_PREFIX.length) : '';
+}
+
+/**
  * Appel à l'action unique de chaque événement (CDC §11, §12.1).
  *
  * `label` est le libellé du bouton, `target` l'étape à ouvrir dans
- * l'application — jamais une action exécutée d'office. L'API porte ces valeurs
- * (`action_label` / `action_target`) ; cette table n'est qu'un repli pour les
- * notifications envoyées avant leur mise en place et pour les types émis
- * uniquement côté client.
+ * l'application — jamais une action exécutée d'office. Une cible `page:…`
+ * désigne une page entière, une cible nue une ancre du détail. L'API porte ces
+ * valeurs (`action_label` / `action_target`) ; cette table n'est qu'un repli
+ * pour les notifications envoyées avant leur mise en place et pour les types
+ * émis uniquement côté client.
  */
 const NOTIFICATION_ACTIONS = {
     join_request: { label: 'Voir et répondre', target: 'participant-requests' },
     join_accepted: { label: 'Confirmer ma présence', target: 'confirm-presence' },
-    join_rejected: { label: "Voir d'autres envies", target: '' },
+    join_rejected: { label: "Voir d'autres envies", target: 'page:catalogue' },
     presence_confirm: { label: 'Je confirme', target: 'confirm-presence' },
     organizer_keep: { label: "Maintenir l'activité", target: 'maintenance' },
     reminder_day: { label: 'Voir les détails', target: 'practical-info' },
     reminder_soon: { label: "Voir l'itinéraire", target: 'practical-info' },
     desire_updated: { label: 'Voir la modification', target: 'practical-info' },
     desire_cancelled: { label: "Voir d'autres envies", target: '' },
-    post_activity: { label: 'Donner mon retour', target: '' },
-    republish: { label: 'Reprogrammer', target: '' },
-    recommendation: { label: 'Découvrir', target: '' },
-    new_desire: { label: 'Découvrir', target: '' },
+    // `post_activity` ne porte pas d'appel à l'action : aucun écran ne recueille
+    // encore le retour d'expérience.
+    republish: { label: 'Reprogrammer', target: 'page:create-republish' },
+    recommendation: { label: 'Découvrir', target: 'page:catalogue' },
+    new_desire: { label: 'Découvrir', target: 'page:catalogue' },
+    // Envie devenue populaire d'elle-même : l'info vit dans le détail, l'action
+    // y conduit directement.
+    popular_desire: { label: "Voir l'envie", target: 'practical-info' },
+    // Relance d'un compte dormant : le seul écran qui réponde à la question est
+    // un formulaire de création vierge.
+    dormant_user: { label: 'Publier une envie', target: 'page:create' },
 };
 
 /** Retourne l'action portée par un type de notification, ou null. */
@@ -178,8 +203,11 @@ export function resolveNotificationAction(source = {}) {
 }
 
 /**
- * Étape à ouvrir après l'ouverture de l'envie, par type de notification.
- * Une valeur null signifie « ouvrir l'envie sans étape à mettre en avant ».
+ * Étape ou page à ouvrir pour un type de notification.
+ *
+ * Une ancre nue désigne une étape du détail ; une cible `page:…` désigne une
+ * page entière (voir `isPageTarget`). Une valeur null signifie « ouvrir
+ * l'envie sans étape à mettre en avant ».
  */
 export function getNotificationFocus(type) {
     const action = getNotificationAction(type);

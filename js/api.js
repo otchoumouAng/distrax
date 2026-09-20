@@ -964,6 +964,67 @@ export const api = {
         return handleResponse(res);
     },
 
+    // ── Textes des notifications ─────────────────────────────────
+
+    /**
+     * GET /admin/notification-templates — Types à texte et variantes rédigées [admin]
+     * Le serveur décrit lui-même les types, leurs variables et leur texte par
+     * défaut : la console n'énumère rien et n'affiche que ce qui est déclaré.
+     * @returns {Promise<{types: Array<Object>, templates: Array<Object>}>}
+     */
+    async getAdminNotificationTemplates() {
+        const res = await fetch(`${BASE_URL}/admin/notification-templates`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /admin/notification-templates — Rédige une variante de texte [admin]
+     * @param {{event_type: string, title: string, body: string, is_active?: boolean}} template
+     * @returns {Promise<Object>} La variante telle qu'enregistrée
+     */
+    async createAdminNotificationTemplate(template) {
+        const res = await fetch(`${BASE_URL}/admin/notification-templates`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify(template),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * PATCH /admin/notification-templates/:id — Modifie une variante [admin]
+     * Les champs absents restent inchangés : activer ou désactiver une variante
+     * ne touche pas à son texte.
+     * @param {string} templateId
+     * @param {{title?: string, body?: string, is_active?: boolean}} values
+     * @returns {Promise<Object>} La variante telle qu'enregistrée
+     */
+    async updateAdminNotificationTemplate(templateId, values) {
+        const res = await fetch(
+            `${BASE_URL}/admin/notification-templates/${encodeURIComponent(templateId)}`,
+            { method: 'PATCH', headers: buildHeaders(), body: JSON.stringify(values) },
+        );
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /admin/notification-templates/preview — Rend un texte sans rien envoyer [admin]
+     * Le rendu passe par le même moteur que les envois : les variables prennent
+     * leur valeur d'exemple, faute de quoi un marqueur resterait visible.
+     * @param {{event_type: string, title?: string, body?: string}} template
+     * @returns {Promise<{title: string, body: string, variables: Object}>}
+     */
+    async previewAdminNotificationTemplate(template) {
+        const res = await fetch(`${BASE_URL}/admin/notification-templates/preview`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify(template),
+        });
+        return handleResponse(res);
+    },
+
     // ── Suivi et gestion des comptes (MNO-19) ────────────────────
 
     /**

@@ -2809,6 +2809,48 @@ textarea.form-input {
     text-align: left;
 }
 
+/* Textes des notifications : les variantes d'un type, puis leurs champs.
+   Le corps du message s'édite sur toute la largeur, contrairement aux
+   réglages courts qui tiennent dans la colonne de droite. */
+.admin-template-group {
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+}
+
+.admin-template-group:first-of-type {
+    border-top: none;
+}
+
+.admin-template-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.admin-template-field .admin-setting-label {
+    font-size: 13px;
+}
+
+.admin-template-input {
+    width: 100%;
+    text-align: left;
+}
+
+.admin-template-body {
+    min-height: 68px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+/* L'aperçu se lit comme une notification : fond neutre, texte tel quel. */
+.admin-template-preview-result {
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
 /* Ciblage */
 .admin-radio {
     display: flex;
