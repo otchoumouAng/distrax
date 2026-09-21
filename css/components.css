@@ -2843,6 +2843,48 @@ textarea.form-input {
     line-height: 1.5;
 }
 
+/* Supprimer : action définitive, donc détachée des actions courantes (rejetée
+   à droite) et confirmée dans la ligne avant d'être exécutée. */
+.admin-template-delete {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 10px 14px;
+    border: none;
+    border-radius: 12px;
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.admin-template-delete[hidden] {
+    display: none;
+}
+
+.admin-template-delete .material-icons-round {
+    font-size: 18px;
+}
+
+.admin-template-confirm {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.admin-template-confirm[hidden] {
+    display: none;
+}
+
+.admin-template-confirm .admin-setting-hint {
+    flex: 1 1 auto;
+}
+
 /* L'aperçu se lit comme une notification : fond neutre, texte tel quel. */
 .admin-template-preview-result {
     padding: 12px;

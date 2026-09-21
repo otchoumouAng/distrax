@@ -792,6 +792,20 @@ export const api = {
         return handleResponse(res);
     },
 
+    /** GET /admin/users/:id/context — Pays, source, apprentissage et affinités [admin] */
+    async getAdminUserContext(userId) {
+        const res = await fetch(`${BASE_URL}/admin/users/${userId}/context`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /** GET /admin/indicators — Qualité de résolution et personnalisation [admin] */
+    async getAdminIndicators() {
+        const res = await fetch(`${BASE_URL}/admin/indicators`, { headers: buildHeaders() });
+        return handleResponse(res);
+    },
+
     /** POST /admin/users/:id/test — Envoie un push de vérification [admin] */
     async sendAdminTestNotification(userId) {
         const res = await fetch(`${BASE_URL}/admin/users/${userId}/test`, {
@@ -968,8 +982,9 @@ export const api = {
 
     /**
      * GET /admin/notification-templates — Types à texte et variantes rédigées [admin]
-     * Le serveur décrit lui-même les types, leurs variables et leur texte par
-     * défaut : la console n'énumère rien et n'affiche que ce qui est déclaré.
+     * Le serveur décrit lui-même les types et leurs variables : la console
+     * n'énumère rien et n'affiche que ce qui est déclaré. Les textes, eux,
+     * vivent en base — le code n'en porte aucun.
      * @returns {Promise<{types: Array<Object>, templates: Array<Object>}>}
      */
     async getAdminNotificationTemplates() {
@@ -1010,9 +1025,25 @@ export const api = {
     },
 
     /**
+     * DELETE /admin/notification-templates/:id — Supprime une variante [admin]
+     * La dernière variante active d'un type est refusée (409) : pour mettre un
+     * type en pause, on le désactive plutôt que de le laisser sans texte.
+     * @param {string} templateId
+     * @returns {Promise<null>}
+     */
+    async deleteAdminNotificationTemplate(templateId) {
+        const res = await fetch(
+            `${BASE_URL}/admin/notification-templates/${encodeURIComponent(templateId)}`,
+            { method: 'DELETE', headers: buildHeaders() },
+        );
+        return handleResponse(res);
+    },
+
+    /**
      * POST /admin/notification-templates/preview — Rend un texte sans rien envoyer [admin]
      * Le rendu passe par le même moteur que les envois : les variables prennent
-     * leur valeur d'exemple, faute de quoi un marqueur resterait visible.
+     * leur valeur d'exemple, faute de quoi un marqueur resterait visible. Rien
+     * ne comble un champ laissé vide : l'aperçu montre exactement ce qui partirait.
      * @param {{event_type: string, title?: string, body?: string}} template
      * @returns {Promise<{title: string, body: string, variables: Object}>}
      */

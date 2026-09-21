@@ -165,6 +165,12 @@ const ADMIN_SECTIONS = [
         label: 'Engagement',
         hint: 'Envies publiées, cœurs reçus et top des envies aimées.',
     },
+    {
+        key: 'indicators',
+        icon: 'insights',
+        label: 'Indicateurs',
+        hint: 'Qualité de résolution du pays et personnalisation.',
+    },
 ];
 
 const SECTION_TITLES = Object.fromEntries(
@@ -174,6 +180,12 @@ const SECTION_TITLES = Object.fromEntries(
 /** Les volumes se lisent d'un coup d'œil : « 1 248 » plutôt que « 1248 ». */
 function formatCount(value) {
     return Number(value || 0).toLocaleString('fr-FR');
+}
+
+/** Un taux sans population de référence vaut « — » : inconnu, pas « 0 % ». */
+function formatRate(value) {
+    if (value === null || value === undefined) return '—';
+    return `${(Number(value) * 100).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
 }
 
 function formatDateTime(iso) {
@@ -307,9 +319,10 @@ export class AdminPage extends HTMLElement {
                         </h3>
                         <p class="admin-card-hint">
                             Le moteur tourne d’une variante à l’autre sans répéter la
-                            dernière servie ; un type sans variante garde son texte par
-                            défaut. Une variable s’écrit entre accolades — les valeurs
-                            montrées sont des exemples, elles ne partent jamais.
+                            dernière servie. Les textes viennent tous d’ici : un type
+                            sans variante active ne s’envoie pas, plutôt que d’en
+                            inventer un. Une variable s’écrit entre accolades — les
+                            valeurs montrées sont des exemples, elles ne partent jamais.
                         </p>
 
                         <form id="adminTemplateForm" class="admin-campaign-form">
@@ -532,6 +545,31 @@ export class AdminPage extends HTMLElement {
                         </div>
                     </div>
 
+                    <!-- Indicateurs : résolution du pays et personnalisation -->
+                    <div class="admin-card" data-admin-section="indicators" hidden>
+                        <h3 class="admin-card-title">
+                            <i class="material-icons-round">insights</i> Indicateurs
+                        </h3>
+                        <p class="admin-card-hint">
+                            Qualité de la résolution du pays, répartition des sources,
+                            conversion et personnalisation. Agrégats seuls : aucune
+                            observation individuelle n’est exposée.
+                        </p>
+                        <div class="admin-chips" id="adminIndicatorHead">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                        <h4 class="admin-section-title">Sources du pays retenu</h4>
+                        <div id="adminIndicatorSources">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                        <h4 class="admin-section-title">Pays et comptes rattachés</h4>
+                        <div id="adminIndicatorCountries">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                        <h4 class="admin-section-title">Rétention des observations</h4>
+                        <div id="adminIndicatorRetention"></div>
+                    </div>
+
                     <div style="height: 40px;"></div>
                 </div>
             </section>
@@ -718,6 +756,8 @@ export class AdminPage extends HTMLElement {
                 return this._loadUserDirectory(this._takePrefetch('users'));
             case 'engagement':
                 return this._loadEngagement(this._takePrefetch('engagement'));
+            case 'indicators':
+                return this._loadIndicators(this._takePrefetch('indicators'));
             default:
                 return undefined;
         }
@@ -743,7 +783,7 @@ export class AdminPage extends HTMLElement {
      */
     async _loadSummaries() {
         this._summary = {};
-        const [outbox, features, catalogs, campaigns, users, engagement, templates] = await Promise.all([
+        const [outbox, features, catalogs, campaigns, users, engagement, templates, indicators] = await Promise.all([
             this._grab('outbox', () => api.getAdminOutbox()),
             this._grab('engine', () => api.getFeatures('notification')),
             this._grab('catalog', () => api.getAdminCatalog()),
@@ -751,6 +791,7 @@ export class AdminPage extends HTMLElement {
             this._grab('users', () => api.getAdminUsersDirectory({ page: 1 })),
             this._grab('engagement', () => api.getAdminStats()),
             this._grab('templates', () => api.getAdminNotificationTemplates()),
+            this._grab('indicators', () => api.getAdminIndicators()),
         ]);
         const counts = outbox?.counts || {};
         const waiting = Number(counts.pending || 0);
@@ -796,6 +837,11 @@ export class AdminPage extends HTMLElement {
 
         this._setTileMetric('engagement', engagement
             ? `${formatCount(engagement.likes_total)} ♥ · ${formatCount(engagement.likes_last_7d)} sur 7 jours`
+            : 'Indisponible');
+
+        const detection = indicators?.detection || {};
+        this._setTileMetric('indicators', indicators
+            ? `${formatRate(detection.rate)} de pays résolu · ${formatCount(detection.unsupported)} non pris en charge`
             : 'Indisponible');
     }
 
@@ -1045,6 +1091,98 @@ export class AdminPage extends HTMLElement {
                 <div class="admin-journal-meta">${escapeHtml(String(row.desire_id || ''))}</div>
             </div>
         `).join('');
+    }
+
+    // ─── Indicateurs de résolution (ADM-04) ──────────────────────────
+
+    async _loadIndicators(prefetched = null) {
+        const head = this.querySelector('#adminIndicatorHead');
+        if (!head) return;
+        try {
+            const data = prefetched || await api.getAdminIndicators();
+            this._renderIndicators(data);
+        } catch (err) {
+            head.innerHTML = this._error(err);
+        }
+    }
+
+    /** Taux d'ensemble, sources du pays retenu, pays rattachés et rétention. */
+    _renderIndicators(data) {
+        const head = this.querySelector('#adminIndicatorHead');
+        const sources = this.querySelector('#adminIndicatorSources');
+        const countries = this.querySelector('#adminIndicatorCountries');
+        const retention = this.querySelector('#adminIndicatorRetention');
+        if (!head || !sources || !countries || !retention) return;
+
+        const detection = data?.detection || {};
+        const personalization = data?.personalization || {};
+        const conversion = data?.conversion || {};
+
+        head.innerHTML = `
+            <span class="admin-chip">
+                <b>${formatRate(detection.rate)}</b>
+                <span>Pays résolu (${formatCount(detection.with_country)} / ${formatCount(detection.accounts)})</span>
+            </span>
+            <span class="admin-chip">
+                <b>${formatCount(detection.confirmed)}</b>
+                <span>Corrections manuelles (${formatRate(detection.confirmation_rate)})</span>
+            </span>
+            <span class="admin-chip">
+                <b>${formatCount(detection.unsupported)}</b>
+                <span>Comptes hors pays pris en charge</span>
+            </span>
+            <span class="admin-chip">
+                <b>${formatRate(conversion.view_to_request)}</b>
+                <span>Consultation → demande</span>
+            </span>
+            <span class="admin-chip">
+                <b>${formatRate(conversion.request_to_confirmed)}</b>
+                <span>Demande → confirmation</span>
+            </span>
+            <span class="admin-chip">
+                <b>${formatCount(personalization.learning_disabled)}</b>
+                <span>Apprentissage coupé (${formatRate(personalization.learning_disabled_rate)})</span>
+            </span>
+        `;
+
+        const sourceRows = data?.sources || [];
+        sources.innerHTML = sourceRows.length
+            ? sourceRows.map((row) => `
+                <div class="admin-journal-row">
+                    <div class="admin-journal-head">
+                        <span class="admin-journal-type">${escapeHtml(row.label || row.source || '—')}</span>
+                        <span class="admin-badge">${formatCount(row.accounts)} compte(s)</span>
+                    </div>
+                    <div class="admin-journal-meta">${escapeHtml(row.source || '')}</div>
+                </div>
+            `).join('')
+            : this._message('Aucun compte avec un pays retenu pour l’instant.');
+
+        const countryRows = data?.countries || [];
+        countries.innerHTML = countryRows.length
+            ? countryRows.map((row) => `
+                <div class="admin-journal-row">
+                    <div class="admin-journal-head">
+                        <span class="admin-journal-type">${escapeHtml(row.label || row.code || '—')}</span>
+                        <span class="admin-badge">${formatCount(row.accounts)} compte(s)</span>
+                    </div>
+                    <div class="admin-journal-meta">
+                        ${escapeHtml(row.code || '')}
+                        ${row.is_active ? '' : ' · hors périmètre'}
+                    </div>
+                </div>
+            `).join('')
+            : this._message('Aucun pays au référentiel.');
+
+        const retentionInfo = data?.retention || {};
+        retention.innerHTML = `
+            <dl class="admin-facts">
+                <div><dt>Durée</dt><dd>${formatCount(retentionInfo.days)} jour(s)</dd></div>
+                <div><dt>Coupure</dt><dd>${escapeHtml(formatDateTime(retentionInfo.cutoff))}</dd></div>
+                <div><dt>Observation la plus ancienne</dt>
+                    <dd>${escapeHtml(formatDateTime(retentionInfo.oldest_telemetry_at))}</dd></div>
+            </dl>
+        `;
     }
 
     // ─── Interrupteurs ───────────────────────────────────────────────
@@ -1445,9 +1583,9 @@ export class AdminPage extends HTMLElement {
 
     /**
      * Les types à texte éditorial et leurs variantes. Le serveur décrit les
-     * types, leurs variables et leurs textes par défaut ; la console ne sait
-     * d'eux que ce qu'il déclare, si bien qu'un type retiré du moteur disparaît
-     * de l'écran de lui-même.
+     * types et leurs variables ; les textes, eux, vivent en base et s'éditent
+     * ici. La console ne sait des types que ce qu'il déclare, si bien qu'un
+     * type retiré du moteur disparaît de l'écran de lui-même.
      */
     async _loadNotificationTemplates(prefetched = null) {
         const list = this.querySelector('#adminTemplateList');
@@ -1527,10 +1665,16 @@ export class AdminPage extends HTMLElement {
                 ?.addEventListener('change', (event) => this._toggleTemplate(row, event.target));
             row.querySelector('.admin-template-check')
                 ?.addEventListener('click', () => this._previewTemplateRow(row));
+            row.querySelector('.admin-template-delete')
+                ?.addEventListener('click', () => this._askDeleteTemplate(row));
+            row.querySelector('.admin-template-confirm-no')
+                ?.addEventListener('click', () => this._cancelDeleteTemplate(row));
+            row.querySelector('.admin-template-confirm-yes')
+                ?.addEventListener('click', () => this._deleteTemplate(row));
         });
     }
 
-    /** Le type, ses variantes et — s'il n'en a aucune — ce qui est servi à sa place. */
+    /** Le type, ses variantes et — s'il n'en a aucune — ce qu'il advient de ses envois. */
     _templateGroup(type) {
         const variants = this._templates.filter(({ event_type }) => event_type === type.event_type);
         return `
@@ -1538,12 +1682,12 @@ export class AdminPage extends HTMLElement {
                 <div class="admin-journal-head">
                     <span class="admin-journal-type">${escapeHtml(type.label)}</span>
                     <span class="admin-badge">
-                        ${escapeHtml(variants.length ? `${variants.length} variante(s)` : 'Texte par défaut')}
+                        ${escapeHtml(variants.length ? `${variants.length} variante(s)` : 'Aucun texte')}
                     </span>
                 </div>
                 ${variants.length
                     ? variants.map((variant) => this._templateRow(type, variant)).join('')
-                    : this._message('Aucune variante : le texte par défaut est servi.')}
+                    : this._message('Aucune variante : ce type ne peut rien envoyer tant qu’aucune n’est rédigée.')}
             </div>
         `;
     }
@@ -1580,6 +1724,20 @@ export class AdminPage extends HTMLElement {
                     </button>
                     <button type="button" class="admin-test-btn admin-template-save">
                         <i class="material-icons-round">save</i> Enregistrer
+                    </button>
+                    <button type="button" class="admin-template-delete" title="Supprimer cette variante">
+                        <i class="material-icons-round">delete_outline</i> Supprimer
+                    </button>
+                </div>
+                <div class="admin-template-confirm" hidden>
+                    <span class="admin-setting-hint">
+                        Supprimer définitivement cette variante ?
+                    </span>
+                    <button type="button" class="admin-user-btn is-danger admin-template-confirm-yes">
+                        Supprimer
+                    </button>
+                    <button type="button" class="admin-user-btn admin-template-confirm-no">
+                        Annuler
                     </button>
                 </div>
                 <div class="admin-template-slot"></div>
@@ -1662,6 +1820,41 @@ export class AdminPage extends HTMLElement {
         }
     }
 
+    /** La suppression est définitive : elle se confirme dans la ligne même. */
+    _askDeleteTemplate(row) {
+        const confirm = row.querySelector('.admin-template-confirm');
+        if (confirm) confirm.hidden = false;
+        const button = row.querySelector('.admin-template-delete');
+        if (button) button.hidden = true;
+    }
+
+    /** Retour à l'état courant : la ligne redevient modifiable telle quelle. */
+    _cancelDeleteTemplate(row) {
+        const confirm = row.querySelector('.admin-template-confirm');
+        if (confirm) confirm.hidden = true;
+        const button = row.querySelector('.admin-template-delete');
+        if (button) button.hidden = false;
+    }
+
+    /**
+     * Supprime une variante. Le refus de la dernière variante active du type
+     * remonte tel quel : la console ne contourne pas la règle, elle l'explique.
+     */
+    async _deleteTemplate(row) {
+        const button = row.querySelector('.admin-template-confirm-yes');
+        if (button) button.disabled = true;
+        try {
+            await api.deleteAdminNotificationTemplate(row.dataset.templateId);
+            this._templates = this._templates.filter(({ id }) => id !== row.dataset.templateId);
+            this._renderTemplateList();
+            this._toast('Variante supprimée');
+        } catch (err) {
+            this._toast(err.message, 'error');
+            this._cancelDeleteTemplate(row);
+            if (button) button.disabled = false;
+        }
+    }
+
     /** Une variante relue remplace celle gardée en mémoire, à sa place. */
     _replaceTemplate(template) {
         const index = this._templates.findIndex(({ id }) => id === template.id);
@@ -1692,8 +1885,8 @@ export class AdminPage extends HTMLElement {
 
     /**
      * Le rendu vient du serveur, qui emploie le même moteur que les envois : les
-     * variables y prennent leur valeur d'exemple. Un texte laissé vide montre le
-     * défaut du type, ce qui permet d'inspecter un type avant d'avoir rien écrit.
+     * variables y prennent leur valeur d'exemple. Un champ laissé vide reste
+     * vide — l'aperçu montre alors exactement ce qui partirait, c'est-à-dire rien.
      */
     async _previewTemplate(container, eventType, title, body) {
         if (!container || !eventType) return;
@@ -2313,6 +2506,7 @@ export class AdminPage extends HTMLElement {
             </div>
             <div id="adminTestResult"></div>
             <div id="adminDiagnostic"><span class="admin-placeholder">Chargement du diagnostic…</span></div>
+            <div id="adminUserContext"><span class="admin-placeholder">Chargement du profil…</span></div>
             <div id="adminJournal"><span class="admin-placeholder">Chargement du journal…</span></div>
         `;
 
@@ -2320,6 +2514,7 @@ export class AdminPage extends HTMLElement {
 
         await Promise.all([
             this._loadDiagnostic(user.id),
+            this._loadUserContext(user.id),
             this._loadJournal(user.id),
         ]);
     }
@@ -2360,6 +2555,56 @@ export class AdminPage extends HTMLElement {
                         ? 'interrupteur coupé'
                         : `${escapeHtml(String(cap.used ?? 0))} / ${escapeHtml(String(cap.limit ?? 0))}${cap.reached ? ' — atteint' : ''}`}</dd></div>
                 </dl>
+            `;
+        } catch (err) {
+            container.innerHTML = this._error(err);
+        }
+    }
+
+    async _loadUserContext(userId) {
+        const container = this.querySelector('#adminUserContext');
+        if (!container) return;
+        try {
+            const data = await api.getAdminUserContext(userId);
+            const country = data?.country || {};
+            const learning = data?.learning || {};
+            const affinities = data?.affinities || {};
+            const categories = affinities.categories || [];
+            const cities = affinities.cities || [];
+
+            container.innerHTML = `
+                <h4 class="admin-section-title">Profil</h4>
+                <dl class="admin-facts">
+                    <div><dt>Pays retenu</dt><dd>${country.code
+                        ? `${escapeHtml(country.label || country.code)} (${escapeHtml(country.code)})`
+                        : 'aucun'}</dd></div>
+                    <div><dt>Source</dt><dd>${escapeHtml(country.source_label || '—')}</dd></div>
+                    <div><dt>Confirmé le</dt><dd>${country.confirmed_at
+                        ? escapeHtml(formatDateTime(country.confirmed_at)) : 'non confirmé'}</dd></div>
+                    <div><dt>Prise en charge</dt><dd>${country.code
+                        ? (country.supported ? 'pays actif' : 'hors périmètre') : '—'}</dd></div>
+                    <div><dt>Apprentissage</dt><dd>${learning.platform_enabled === false
+                        ? 'coupé pour la plateforme'
+                        : (learning.enabled ? 'actif' : 'coupé par le compte')}${learning.reset_at
+                            ? ` — réinitialisé le ${escapeHtml(formatDateTime(learning.reset_at))}` : ''}</dd></div>
+                </dl>
+                <h4 class="admin-section-title">Affinités déduites</h4>
+                ${categories.length || cities.length ? `
+                    <div class="admin-chips">
+                        ${categories.map((item) => `
+                            <span class="admin-chip">
+                                <b>${escapeHtml(item.category || '—')}</b>
+                                <span>Confiance ${escapeHtml(item.confidence || '—')}</span>
+                            </span>
+                        `).join('')}
+                        ${cities.map((item) => `
+                            <span class="admin-chip">
+                                <b>${escapeHtml(item.label || '—')}</b>
+                                <span>Ville · confiance ${escapeHtml(item.confidence || '—')}</span>
+                            </span>
+                        `).join('')}
+                    </div>`
+                    : this._message('Aucune affinité déduite pour ce compte.')}
             `;
         } catch (err) {
             container.innerHTML = this._error(err);
