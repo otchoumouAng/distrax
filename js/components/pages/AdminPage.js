@@ -1278,7 +1278,7 @@ export class AdminPage extends HTMLElement {
             return;
         }
         container.innerHTML = `
-            <h4 class="admin-section-title">Fenêtre d’envoi</h4>
+            <h4 class="admin-section-title">Réglages d’envoi</h4>
             <p class="admin-card-hint">
                 Les envois non critiques ne partent qu’entre l’ouverture et la
                 fermeture, heure locale. Hors fenêtre, ils sont reportés à la
@@ -1286,7 +1286,7 @@ export class AdminPage extends HTMLElement {
             </p>
             ${settings.map((setting) => this._settingRow(setting)).join('')}
             <button type="button" class="admin-settings-save" id="adminSettingsSave">
-                <i class="material-icons-round">save</i> Enregistrer la fenêtre
+                <i class="material-icons-round">save</i> Enregistrer les réglages
             </button>
         `;
 
@@ -1302,6 +1302,21 @@ export class AdminPage extends HTMLElement {
 
     /** Une ligne de réglage : le contrôle dépend du type déclaré par le back. */
     _settingRow({ key, label, kind, hint, value }) {
+        // Interrupteur : même présentation que les fonctionnalités du moteur.
+        if (kind === 'bool') {
+            return `
+                <label class="admin-switch-row">
+                    <span class="admin-switch-text">
+                        <span class="admin-switch-label">${escapeHtml(label)}</span>
+                        <span class="admin-switch-hint">${escapeHtml(hint || '')}</span>
+                    </span>
+                    <input type="checkbox" class="admin-switch-input"
+                           data-kind="bool" data-key="${escapeHtml(key)}" ${value ? 'checked' : ''}>
+                    <span class="admin-switch-track"><span class="admin-switch-thumb"></span></span>
+                </label>
+            `;
+        }
+
         const id = `adminSetting-${String(key).replace(/[^a-zA-Z0-9-]/g, '-')}`;
         const isDays = kind === 'weekdays';
         let control;
@@ -1341,6 +1356,9 @@ export class AdminPage extends HTMLElement {
             values[input.dataset.key] = input.dataset.kind === 'int'
                 ? Number(input.value || 0)
                 : input.value;
+        });
+        container.querySelectorAll('.admin-switch-input').forEach((input) => {
+            values[input.dataset.key] = input.checked;
         });
         container.querySelectorAll('.admin-day').forEach((day) => {
             const key = day.dataset.key;

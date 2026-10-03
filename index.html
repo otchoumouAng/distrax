@@ -78,6 +78,7 @@
             <p class="dow-desc">Dystrax est conçu pour une expérience mobile.<br>Scannez le QR code ou ouvrez ce lien sur votre téléphone.</p>
             <div class="dow-qr" id="dowQr" title="Ouvrir sur mobile"></div>
             <p class="dow-hint">Disponible sur iOS &amp; Android</p>
+            <button type="button" class="dow-admin-link" id="dowAdminAccess">Accès administration</button>
         </div>
     </div>
 
@@ -187,10 +188,27 @@
             var qrEl = document.getElementById('dowQr');
             if (!wall || !qrEl) return;
 
+            // Le mur reste franchissable : un opérateur peut ouvrir l'espace
+            // d'administration depuis un ordinateur sans passer par un téléphone.
+            var BYPASS_KEY = 'dystrax:desktop-bypass';
+            var bypassed = false;
+            try { bypassed = window.sessionStorage.getItem(BYPASS_KEY) === '1'; } catch (err) { /* stockage indisponible */ }
+
+            function openAdminAccess() {
+                bypassed = true;
+                try { window.sessionStorage.setItem(BYPASS_KEY, '1'); } catch (err) { /* stockage indisponible */ }
+                wall.hidden = true;
+                wall.setAttribute('aria-hidden', 'true');
+                window.dispatchEvent(new CustomEvent('navigate-admin'));
+            }
+
+            var adminBtn = document.getElementById('dowAdminAccess');
+            if (adminBtn) adminBtn.addEventListener('click', openAdminAccess);
+
             function updateDesktopWall() {
-                wall.hidden = !desktopMedia.matches;
-                wall.setAttribute('aria-hidden', String(!desktopMedia.matches));
-                if (!desktopMedia.matches || qrEl.firstChild) return;
+                wall.hidden = bypassed || !desktopMedia.matches;
+                wall.setAttribute('aria-hidden', String(bypassed || !desktopMedia.matches));
+                if (bypassed || !desktopMedia.matches || qrEl.firstChild) return;
                 var url = encodeURIComponent(window.location.href);
                 var img = document.createElement('img');
                 img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' + url;

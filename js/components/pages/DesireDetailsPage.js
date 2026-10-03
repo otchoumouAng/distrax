@@ -262,6 +262,22 @@ export class DesireDetailsPage extends HTMLElement {
                     font-size: 13px;
                 }
 
+                /* —— Bouton Inviter (créateur) : partage un lien qui met en avant « Rejoindre » —— */
+                .invite-action-btn {
+                    flex: 0 0 auto;
+                    height: 44px; padding: 0 18px;
+                    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+                    border: none; border-radius: 100px;
+                    background: color-mix(in srgb, var(--primary) 12%, transparent);
+                    color: var(--primary);
+                    font-size: 13px; font-weight: 600; cursor: pointer;
+                    white-space: nowrap;
+                    transition: transform 0.15s ease, background 0.2s ease;
+                }
+                .invite-action-btn .material-icons-round { font-size: 18px; }
+                .invite-action-btn:hover { background: color-mix(in srgb, var(--primary) 20%, transparent); }
+                .invite-action-btn:active { transform: scale(0.97); }
+
                 /* —— Bouton Like ♥ (pied de page) —— */
                 .footer-actions { display: flex; align-items: center; gap: 10px; }
                 .details-like-btn {
@@ -446,6 +462,12 @@ export class DesireDetailsPage extends HTMLElement {
                         <span class="price-sub">Par personne</span>
                     </div>
                     <div class="footer-actions">
+                        <button class="invite-action-btn" id="inviteActionBtn" type="button"
+                                aria-label="Inviter des proches à rejoindre cette envie"
+                                title="Inviter des proches à rejoindre" style="display: none;">
+                            <i class="material-icons-round">person_add</i>
+                            <span>Inviter</span>
+                        </button>
                         <button class="details-like-btn" id="likeActionBtn" type="button"
                                 aria-pressed="false" aria-label="Aimer cette envie" title="Aimer cette envie">
                             <i class="material-icons-round">favorite_border</i>
@@ -488,6 +510,12 @@ export class DesireDetailsPage extends HTMLElement {
         const shareBtn = this.querySelector('.share-btn');
         if (shareBtn) {
             shareBtn.addEventListener('click', () => this._handleShare());
+        }
+
+        // Créateur : inviter des proches via un lien qui met « Rejoindre » en avant.
+        const inviteBtn = this.querySelector('#inviteActionBtn');
+        if (inviteBtn) {
+            inviteBtn.addEventListener('click', () => this._handleInvite());
         }
 
         // NAV-06 : depuis l'état annulé, proposer des envies alternatives.
@@ -730,6 +758,10 @@ export class DesireDetailsPage extends HTMLElement {
         const hostCard = this.querySelector('.host-card');
         if (hostCard) hostCard.style.display = this._isCreator ? 'none' : '';
         const footer = this.querySelector('.details-footer');
+
+        // Le créateur ne rejoint pas sa propre envie : on lui propose d'inviter.
+        const inviteBtn = this.querySelector('#inviteActionBtn');
+        if (inviteBtn) inviteBtn.style.display = this._isCreator ? '' : 'none';
 
         // NAV-06 : une activité annulée n'offre plus aucune action d'inscription.
         const cancelledBanner = this.querySelector('#dCancelledState');
@@ -1363,13 +1395,34 @@ export class DesireDetailsPage extends HTMLElement {
         window.dispatchEvent(new CustomEvent('desire-detail-closed', { bubbles: true, composed: true }));
     }
 
-    /** Partager l'envie : Web Share API (natif) ou share bottom-sheet (fallback). */
+    /** Partager l'envie : lien simple, sans intention particulière. */
     _handleShare() {
+        this._shareDesire();
+    }
+
+    /**
+     * Inviter des proches à rejoindre l'envie (créateur).
+     *
+     * Le lien porte ``notification_action=confirm-presence`` : à l'ouverture, le
+     * détail met en avant le bouton « Rejoindre » (CDC §11) sans jamais inscrire
+     * le destinataire à sa place.
+     */
+    _handleInvite() {
+        this._shareDesire({ focus: 'confirm-presence', verb: 'Rejoins cette envie sur Dystrax' });
+    }
+
+    /**
+     * Partage un lien profond vers l'envie : Web Share API (natif) ou
+     * bottom-sheet (repli). ``focus`` ajoute l'action à mettre en avant à
+     * l'ouverture du lien partagé.
+     */
+    _shareDesire({ focus = '', verb = 'Découvre cette envie sur Dystrax' } = {}) {
         if (!this._desireId) return;
         const titleEl = this.querySelector('#dTitle');
         const title = (titleEl && titleEl.textContent) ? titleEl.textContent.trim() : 'Une envie sur Dystrax';
-        const url   = `${window.location.origin}${window.location.pathname || '/'}#desire/${this._desireId}`;
-        const text  = `${title} — Découvre cette envie sur Dystrax`;
+        let url = `${window.location.origin}${window.location.pathname || '/'}#desire/${this._desireId}`;
+        if (focus) url += `?notification_action=${encodeURIComponent(focus)}`;
+        const text = `${title} — ${verb}`;
 
         // Web Share API — ouvre le menu natif du système (WhatsApp, Instagram, TikTok, etc.)
         if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {

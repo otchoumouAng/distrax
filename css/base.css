@@ -276,6 +276,32 @@ html.smooth-scroll {
     margin: 0;
 }
 
+/* Accès de secours à l'espace d'administration depuis un ordinateur. */
+.dow-admin-link {
+    margin-top: 6px;
+    padding: 10px 22px;
+    border: 1px solid var(--border-light);
+    border-radius: 24px;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.dow-admin-link:hover {
+    background: color-mix(in srgb, var(--primary) 10%, var(--bg-card));
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.dow-admin-link:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
 /* La largeur seule peut dépasser 768px sur un téléphone en paysage ou en
    version pour ordinateur. Réserver le blocage aux pointeurs de type souris.
    Garder cette condition synchronisée avec le QR code dans index.html. */
