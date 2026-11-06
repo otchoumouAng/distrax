@@ -1,6 +1,13 @@
 import { escapeHtml, safeUrl, DEFAULT_AVATAR_PATH, DEFAULT_AVATAR_DATA_URI } from '../../utils/escapeHtml.js';
 import { resolveImageUrl } from '../../utils/imageUrl.js';
 import { formatSpotsLabel } from '../../utils/formatSpots.js';
+import { rememberTicketTarget, rememberReceiptTarget } from '../../utils/paymentFlow.js';
+import {
+    ORGANIZER_PAYMENTS_TARGET_KEY,
+    SCAN_TARGET_KEY,
+    isPlatformPaidDesire,
+    rememberOrganizerTarget,
+} from '../../utils/organizerView.js';
 
 export class ProfilePage extends HTMLElement {
     connectedCallback() {
@@ -86,6 +93,11 @@ export class ProfilePage extends HTMLElement {
                         <button class="profile-action-item" id="installAppBtn" style="display: none;">
                             <i class="material-icons-round">install_mobile</i>
                             <span>Installer Dystrax</span>
+                            <i class="material-icons-round profile-action-arrow">chevron_right</i>
+                        </button>
+                        <button class="profile-action-item" id="walletBtn" style="display: none;">
+                            <i class="material-icons-round">account_balance_wallet</i>
+                            <span>Portefeuille</span>
                             <i class="material-icons-round profile-action-arrow">chevron_right</i>
                         </button>
                         <button class="profile-action-item" id="notifPrefsBtn">
@@ -216,6 +228,70 @@ export class ProfilePage extends HTMLElement {
 
         if (tabCreated) tabCreated.addEventListener('click', () => switchTab('created'));
         if (tabJoined) tabJoined.addEventListener('click', () => switchTab('joined'));
+
+        // ── Billet et reçu depuis « Rejointes » (PAR-04) ─────────
+        // Délégation : la liste est reconstruite à chaque chargement.
+        const joinedListEl = this.querySelector('#joinedDesiresList');
+        if (joinedListEl) {
+            joinedListEl.addEventListener('click', (event) => {
+                const btn = event.target.closest('[data-paid-action]');
+                if (!btn) return;
+                const action = btn.getAttribute('data-paid-action');
+                if (action === 'ticket') {
+                    rememberTicketTarget({
+                        bookingId: btn.getAttribute('data-booking-id'),
+                        desireId: btn.getAttribute('data-desire-id'),
+                    });
+                    document.dispatchEvent(new CustomEvent('open-ticket', {
+                        bubbles: true,
+                        composed: true,
+                        detail: {
+                            bookingId: btn.getAttribute('data-booking-id'),
+                            desireId: btn.getAttribute('data-desire-id'),
+                        },
+                    }));
+                } else if (action === 'receipt') {
+                    rememberReceiptTarget(btn.getAttribute('data-payment-id'));
+                    document.dispatchEvent(new CustomEvent('open-receipt', {
+                        bubbles: true,
+                        composed: true,
+                        detail: { paymentId: btn.getAttribute('data-payment-id') },
+                    }));
+                }
+            });
+        }
+
+        // ── Accès organisateur depuis « Créées » (ORG-02/ORG-03) ──
+        // Délégation : la liste est reconstruite à chaque chargement.
+        const createdListEl = this.querySelector('#myDesiresList');
+        if (createdListEl) {
+            createdListEl.addEventListener('click', (event) => {
+                const btn = event.target.closest('[data-org-action]');
+                if (!btn) return;
+                const desireId = btn.closest('desire-card')?.getAttribute('desire-id');
+                if (!desireId) return;
+                const action = btn.getAttribute('data-org-action');
+                btn.closest('dialog')?.close();
+                const eventName = action === 'scan'
+                    ? 'navigate-scan'
+                    : 'navigate-organizer-payments';
+                if (action === 'scan') rememberOrganizerTarget(SCAN_TARGET_KEY, desireId);
+                else rememberOrganizerTarget(ORGANIZER_PAYMENTS_TARGET_KEY, desireId);
+                document.dispatchEvent(new CustomEvent(eventName, {
+                    bubbles: true,
+                    composed: true,
+                    detail: { desireId },
+                }));
+            });
+        }
+
+        // Portefeuille organisateur (ORG-05).
+        const walletBtn = this.querySelector('#walletBtn');
+        if (walletBtn) {
+            walletBtn.addEventListener('click', () => {
+                this.dispatchEvent(new CustomEvent('navigate-wallet', { bubbles: true, composed: true }));
+            });
+        }
 
         // Boutons Boost → naviguent vers la page de configuration Boost
         this.querySelectorAll('.boost-cta-btn').forEach(btn => {
@@ -393,6 +469,12 @@ export class ProfilePage extends HTMLElement {
             const adminEntry = this.querySelector('#adminBtn');
             if (adminEntry) adminEntry.style.display = user?.is_admin ? 'flex' : 'none';
 
+            // Portefeuille : visible dès qu'une envie payante encaissée existe.
+            const walletEntry = this.querySelector('#walletBtn');
+            if (walletEntry) {
+                walletEntry.style.display = (myDesires || []).some(isPlatformPaidDesire) ? 'flex' : 'none';
+            }
+
             // Mise à jour des stats
             const statCreated = this.querySelector('#statCreated');
             const statJoined = this.querySelector('#statJoined');
@@ -423,7 +505,7 @@ export class ProfilePage extends HTMLElement {
                         if (desire.price_type === 'contribution') priceStr = 'Contribution libre';
                         else if (desire.price_type === 'paid') priceStr = desire.price_amount ? desire.price_amount + ' FCFA' : 'Payant';
 
-                        const authorAvatar = resolveImageUrl(user.avatar_url) || '/assets/img/avatar.png';
+                        const authorAvatar = resolveImageUrl(desire.author_avatar_url || user.avatar_url) || DEFAULT_AVATAR_PATH;
                         const hasActiveBoost = activeBoostIds.has(String(desire.id));
                         myDesiresList.innerHTML += `
                             <desire-card 
@@ -442,8 +524,10 @@ export class ProfilePage extends HTMLElement {
                                 description="${escapeHtml(desire.description || '')}"
                                 icon="${escapeHtml(desire.category_icon || desire.category || 'label')}"
                                 desire-status="${escapeHtml(desire.desire_status || '')}"
+                                interested-avatars="${escapeHtml(JSON.stringify(desire.interested_avatars || []))}"
+                                ${isPlatformPaidDesire(desire) ? 'show-management' : ''}
                                 ${desire.needs_maintenance ? 'needs-maintenance' : ''}
-                                ${isBoostEnabled ? 'show-boost' : ''}
+                                ${isBoostEnabled && (hasActiveBoost || !desire.boost_unavailable_reason) ? 'show-boost' : ''}
                                 ${hasActiveBoost ? 'has-active-boost' : ''}
                                 ${hasActiveBoost ? 'is-boosted' : ''}
                             ></desire-card>
@@ -482,15 +566,48 @@ export class ProfilePage extends HTMLElement {
 
                         // Trouver l'auteur si disponible
                         const authorPseudo = desire.author?.pseudo || desire.author_pseudo || 'Organisateur';
-                        const authorAvatarSafe = resolveImageUrl(desire.author?.avatar_url || desire.author_avatar) || DEFAULT_AVATAR_PATH;
+                        const authorAvatarSafe = resolveImageUrl(
+                            desire.author_avatar_url || desire.author?.avatar_url || desire.author_avatar,
+                        ) || DEFAULT_AVATAR_PATH;
 
-                        // 'confirmed' = présence confirmée, participation active (PAR-08)
-                        const currentMode = (desire.status === 'accepted' || desire.status === 'confirmed') ? 'joined' : 'pending';
+                        // 'confirmed' = présence confirmée, participation active (PAR-08).
+                        // Une entrée issue de `paid_bookings` porte `booking_id` :
+                        // c'est le statut de la réservation qui fait foi, y compris
+                        // après annulation (PAR-02 / PAR-05).
+                        const hasBooking = Boolean(desire.booking_id);
+                        const bookingStatus = hasBooking ? (desire.status || '') : '';
+                        let currentMode = (desire.status === 'accepted' || desire.status === 'confirmed') ? 'joined' : 'pending';
+                        if (hasBooking) {
+                            currentMode = ['confirmed', 'refund_due', 'cancelled'].includes(bookingStatus)
+                                ? bookingStatus
+                                : 'pending';
+                        }
+
+                        // Billet et reçu restent accessibles depuis « Rejointes »
+                        // (PAR-04), y compris après une annulation (PAR-05).
+                        const canViewTicket = hasBooking && bookingStatus === 'confirmed' && Boolean(desire.ticket_id);
+                        const canViewReceipt = hasBooking && Boolean(desire.payment_id);
+                        const statusNote = bookingStatus === 'refund_due'
+                            ? '<span class="profile-paid-status"><i class="material-icons-round">hourglass_top</i> Remboursement en cours</span>'
+                            : bookingStatus === 'cancelled'
+                                ? '<span class="profile-paid-status"><i class="material-icons-round">event_busy</i> Participation annulée — billet invalidé</span>'
+                                : '';
+                        const paidActionsHtml = (canViewTicket || canViewReceipt || statusNote) ? `
+                            <div class="profile-paid-actions">
+                                ${statusNote}
+                                ${canViewTicket || canViewReceipt ? `
+                                    <div class="profile-paid-buttons">
+                                        ${canViewTicket ? `<button type="button" class="profile-paid-btn" data-paid-action="ticket" data-booking-id="${escapeHtml(String(desire.booking_id))}" data-desire-id="${escapeHtml(String(desire.id))}"><i class="material-icons-round">confirmation_number</i> Mon billet</button>` : ''}
+                                        ${canViewReceipt ? `<button type="button" class="profile-paid-btn" data-paid-action="receipt" data-payment-id="${escapeHtml(String(desire.payment_id))}"><i class="material-icons-round">receipt_long</i> Reçu</button>` : ''}
+                                    </div>` : ''}
+                            </div>` : '';
 
                         joinedList.innerHTML += `
+                            <div class="profile-desire-item">
                             <desire-card 
                                 mode="${currentMode}"
                                 desire-id="${escapeHtml(String(desire.id))}"
+                                ${bookingStatus === 'refund_due' || bookingStatus === 'cancelled' ? 'navigate-on-card' : ''}
                                 theme="${escapeHtml(desire.category || 'explore')}" 
                                 author="${escapeHtml(authorPseudo)}" 
                                 time-ago="${escapeHtml(timeAgo)}" 
@@ -504,6 +621,8 @@ export class ProfilePage extends HTMLElement {
                                 icon="${escapeHtml(desire.category_icon || desire.category || 'label')}"
                                 desire-status="${escapeHtml(desire.desire_status || '')}"
                             ></desire-card>
+                            ${paidActionsHtml}
+                            </div>
                         `;
                     });
                 } else {
@@ -720,6 +839,7 @@ export class ProfilePage extends HTMLElement {
     }
 
     hide() {
+        this.querySelector('.card-management-dialog[open]')?.close();
         this.querySelector('#profilePage').style.display = 'none';
     }
 }

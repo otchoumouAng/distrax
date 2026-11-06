@@ -703,6 +703,18 @@ body.state-results .scroll-down-indicator {
     border-top: none;
 }
 
+.desire-card--profile .card-footer {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+}
+
+.desire-card--profile .card-actions {
+    margin-inline-start: auto;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
 .participants {
     display: flex;
     flex-direction: row;
@@ -712,6 +724,7 @@ body.state-results .scroll-down-indicator {
 
 .avatars-stack {
     display: flex;
+    flex-shrink: 0;
 }
 
 .avatars-stack img {
@@ -820,6 +833,76 @@ body.state-results .scroll-down-indicator {
     transform: translateY(-1px);
 }
 .ca-btn--icon .material-icons-round { font-size: 17px; }
+
+.card-management-trigger {
+    background: color-mix(in srgb, var(--primary) 9%, var(--bg-card));
+    border-radius: 10px;
+}
+
+.card-management-dialog {
+    width: min(340px, calc(100% - 32px));
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: 14px;
+    border: 1px solid var(--border-color, rgba(0,0,0,.1));
+    border-radius: 20px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    box-shadow: 0 16px 56px rgba(15, 23, 42, .22);
+}
+
+.card-management-dialog::backdrop {
+    background: rgba(15, 23, 42, .48);
+}
+
+.card-management-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 4px 8px 10px;
+}
+
+.card-management-header h3 {
+    font-size: 15px;
+    font-weight: 650;
+}
+
+.card-management-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 46px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 550;
+    text-align: start;
+    cursor: pointer;
+}
+
+.card-management-option:hover,
+.card-management-option:focus-visible {
+    background: color-mix(in srgb, var(--primary) 8%, var(--bg-card));
+}
+
+.card-management-option .material-icons-round {
+    color: var(--primary);
+    font-size: 20px;
+}
+
+@media (max-width: 600px) {
+    .card-management-dialog {
+        inset: auto 0 12px;
+        margin: 0 auto;
+        padding-bottom: max(14px, env(safe-area-inset-bottom));
+    }
+}
 
 /* ── Éditer */
 .ca-btn--edit {
@@ -1759,6 +1842,51 @@ body.state-results .results-content {
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+/* Actions des participations payantes (PAR-04 / PAR-05) */
+.profile-paid-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: -4px;
+}
+
+.profile-paid-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.profile-paid-status .material-icons-round {
+    font-size: 16px;
+}
+
+.profile-paid-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.profile-paid-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(99, 102, 241, 0.35);
+    background: rgba(99, 102, 241, 0.07);
+    color: var(--primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.profile-paid-btn .material-icons-round {
+    font-size: 18px;
 }
 
 /* CTA Boost */
@@ -2960,6 +3088,17 @@ textarea.form-input {
     display: flex;
     gap: 8px;
     margin-bottom: 12px;
+}
+
+/* Recherche multi-critères : les champs passent à la ligne plutôt que de
+   comprimer la saisie sur un écran étroit. */
+.admin-filter-form {
+    flex-wrap: wrap;
+}
+
+.admin-filter-form .form-input {
+    flex: 1 1 160px;
+    min-width: 0;
 }
 
 .admin-search-btn {

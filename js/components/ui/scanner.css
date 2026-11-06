@@ -1,0 +1,203 @@
+.scan-page {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: auto;
+    background: #080d17;
+    color: #fff;
+}
+
+.scan-page [hidden],
+.scan-page[hidden] {
+    display: none;
+}
+
+.scan-header {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    align-items: center;
+    gap: 10px;
+    padding: max(14px, env(safe-area-inset-top)) 20px 14px;
+    background: #080d17;
+}
+
+.scan-header h1 {
+    margin: 0;
+    color: inherit;
+    font-size: 16px;
+    text-align: center;
+}
+
+.scan-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: #ffffff16;
+    color: inherit;
+    cursor: pointer;
+}
+
+.scan-page svg {
+    display: block;
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.scan-body {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 260px;
+    background: radial-gradient(ellipse at center, #19263b, #080d17 75%);
+}
+
+.scan-camera {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    visibility: hidden;
+    overflow: hidden;
+}
+
+.scan-camera.open { visibility: visible; }
+
+.scan-camera::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(transparent 55%, #080d17e6);
+}
+
+.scan-camera video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scan-viewport {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 18px;
+    padding: 16px;
+    text-align: center;
+}
+
+.scan-aim {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: min(66vw, 290px, 41svh);
+    aspect-ratio: 1;
+}
+
+.scan-aim .scan-reticle {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    stroke-width: 4;
+    filter: drop-shadow(0 1px 4px #0009);
+}
+
+.scan-viewport p {
+    margin: 0;
+    padding: 6px 14px;
+    border-radius: 30px;
+    background: #080d17b8;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.scan-check {
+    display: grid;
+    place-items: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: #bcf4d8;
+    color: #124e34;
+}
+
+.scan-check svg { width: 36px; height: 36px; }
+
+.scan-done h2 { margin: 0; color: inherit; font-size: 24px; }
+
+.scan-controls {
+    display: grid;
+    gap: 10px;
+    width: min(100%, 420px);
+    min-height: 48px;
+    box-sizing: border-box;
+    margin-inline: auto;
+    padding: 0 20px max(22px, env(safe-area-inset-bottom));
+}
+
+.scan-primary {
+    width: 100%;
+    min-height: 52px;
+    border: 0;
+    border-radius: 28px;
+    background: #fff;
+    color: #0c1728;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.scan-primary:disabled { opacity: .65; cursor: default; }
+
+.scan-page button:focus-visible,
+.scan-page input:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 3px; }
+
+.scan-feedback {
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: #111a2a;
+    color: #fff;
+    text-align: center;
+    font-size: 13px;
+}
+
+.scan-feedback--error { color: #fecaca; }
+
+.scan-options {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid #ffffff24;
+    border-radius: 14px;
+    background: #111a2a;
+    font-size: 13px;
+}
+
+.scan-options button,
+.scan-options input {
+    min-height: 44px;
+    box-sizing: border-box;
+    border: 1px solid #ffffff24;
+    border-radius: 10px;
+    background: #080d17;
+    color: #fff;
+    font: inherit;
+}
+
+.scan-options button { cursor: pointer; }
+.scan-options input { width: 100%; padding: 0 12px; }
+.scan-options input::placeholder { color: #a9b4c7; }

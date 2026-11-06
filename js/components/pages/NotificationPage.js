@@ -5,6 +5,7 @@ const NOTIFICATION_TYPES = {
     join_request: { icon: 'group_add', color: '#6366f1', label: 'Nouvelle demande' },
     join_accepted: { icon: 'check_circle', color: '#10b981', label: 'Demande acceptée' },
     join_rejected: { icon: 'cancel', color: '#ef4444', label: 'Demande refusée' },
+    ticket_issued: { icon: 'confirmation_number', color: '#10b981', label: 'Billet émis' },
     new_desire: { icon: 'interests', color: '#f59e0b', label: 'Nouvelle envie' },
     organizer_keep: { icon: 'event_available', color: '#f59e0b', label: 'Maintien à confirmer' },
     reminder_day: { icon: 'event', color: '#0ea5e9', label: 'Rappel veille' },

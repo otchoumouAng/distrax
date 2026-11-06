@@ -15,6 +15,8 @@
  * à un compte non habilité. La garde locale évite d'afficher un écran vide.
  */
 import { api } from '../../api.js';
+import '../ui/FinanceOperations.js';
+import '../ui/PaymentCases.js';
 import { escapeHtml, DEFAULT_AVATAR_PATH } from '../../utils/escapeHtml.js';
 import { resolveImageUrl } from '../../utils/imageUrl.js';
 
@@ -118,6 +120,51 @@ const ACTION_TARGET_LABELS = {
     'page:create-republish': 'Republier une envie',
 };
 
+/** États d'un dossier payant, tels que la console les nomme (EXP-01). */
+const CASE_STATUS_LABELS = {
+    holding: 'En attente de paiement',
+    awaiting_payment: 'Paiement en cours',
+    confirmed: 'Confirmée',
+    expired: 'Expirée',
+    cancelled: 'Annulée',
+    refund_due: 'Remboursement dû',
+};
+
+const PAYMENT_STATUS_LABELS = {
+    not_started: 'Aucune tentative',
+    pending: 'En attente',
+    succeeded: 'Encaissé',
+    failed: 'Échoué',
+    unknown: 'Inconnu',
+};
+
+const TICKET_STATUS_LABELS = {
+    not_issued: 'Aucun billet',
+    active: 'Valide',
+    checked_in: 'Scanné',
+    void: 'Annulé',
+};
+
+const REFUND_STATUS_LABELS = {
+    none: 'Aucun',
+    requested: 'À exécuter',
+    processing: 'En cours',
+    succeeded: 'Remboursé',
+    failed: 'Échoué',
+    unknown: 'Inconnu',
+};
+
+const AUDIT_OUTCOME_LABELS = {
+    success: 'Succès',
+    failure: 'Échec',
+    denied: 'Refusé',
+};
+
+/** Montant entier, jamais décimal : la devise est celle du dossier. */
+function formatAmount(value, currency = 'XOF') {
+    return `${Number(value || 0).toLocaleString('fr-FR')} ${currency === 'XOF' ? 'FCFA' : currency}`;
+}
+
 /**
  * L'accueil de la console présente une tuile par section ; une seule section
  * est dépliée à la fois. Le libellé sert aussi de titre au header.
@@ -158,6 +205,12 @@ const ADMIN_SECTIONS = [
         icon: 'group',
         label: 'Utilisateurs',
         hint: 'Comptes, appareils, blocage et inspection.',
+    },
+    {
+        key: 'payments',
+        icon: 'payments',
+        label: 'Paiements',
+        hint: 'Dossiers, remboursements et journal financier.',
     },
     {
         key: 'engagement',
@@ -527,6 +580,82 @@ export class AdminPage extends HTMLElement {
                         <div id="adminUserPanel"></div>
                     </div>
 
+                    <!-- Dossiers de paiement et journal financier (EXP-01) -->
+                    <div data-admin-section="payments" hidden>
+                        <payment-cases></payment-cases><div id="adminPaymentDetail"></div>
+                    </div>
+                    <div class="admin-card" data-admin-section="payments" hidden><details><summary>Opérations à traiter</summary><finance-operations></finance-operations></details></div>
+                    <div class="admin-card" data-admin-section="payments" hidden>
+                        <details><summary>Recherche avancée par réservation</summary>
+                        <h3 class="admin-card-title">
+                            <i class="material-icons-round">payments</i> Dossiers de paiement
+                        </h3>
+                        <p class="admin-card-hint">
+                            Retrouver une réservation payante et lire ses tentatives,
+                            ses billets, ses remboursements et les retenues en cours.
+                            Aucune donnée prestataire — URL de paiement, numéro
+                            complet — n’est affichée ici.
+                        </p>
+                        <form id="adminPaymentForm" class="admin-search-form admin-filter-form">
+                            <input class="form-input" id="adminPaymentBooking" type="text"
+                                   placeholder="Identifiant de réservation" autocomplete="off">
+                            <input class="form-input" id="adminPaymentUser" type="text"
+                                   placeholder="Identifiant du participant" autocomplete="off">
+                            <input class="form-input" id="adminPaymentDesire" type="text"
+                                   placeholder="Identifiant de l’envie" autocomplete="off">
+                            <select class="form-input" id="adminPaymentStatus">
+                                <option value="">Tous les états</option>
+                                <option value="confirmed">Confirmée</option>
+                                <option value="holding">En attente de paiement</option>
+                                <option value="refund_due">Remboursement dû</option>
+                                <option value="cancelled">Annulée</option>
+                                <option value="expired">Expirée</option>
+                            </select>
+                            <select class="form-input" id="adminPaymentAttemptStatus">
+                                <option value="">Tous les paiements</option>
+                                <option value="pending">En attente</option>
+                                <option value="succeeded">Encaissé</option>
+                                <option value="failed">Échoué</option>
+                                <option value="unknown">Inconnu</option>
+                            </select>
+                            <button type="submit" class="admin-search-btn" aria-label="Rechercher">
+                                <i class="material-icons-round">search</i>
+                            </button>
+                        </form>
+                        <div id="adminPaymentResults">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                        </details>
+                    </div>
+
+                    <!-- Journal des décisions financières (EXP-01) -->
+                    <div class="admin-card" data-admin-section="payments" hidden>
+                        <details><summary>Journal financier et filtres avancés</summary>
+                        <h3 class="admin-card-title">
+                            <i class="material-icons-round">receipt_long</i> Journal financier
+                        </h3>
+                        <p class="admin-card-hint">
+                            Chaque décision financière laisse une trace : prise en
+                            charge, résultat, retenue, avec son auteur et son issue.
+                            Le journal ne se corrige pas.
+                        </p>
+                        <form id="adminAuditForm" class="admin-search-form admin-filter-form">
+                            <input class="form-input" id="adminAuditAction" type="text"
+                                   placeholder="Action (ex. refund_claimed)" autocomplete="off">
+                            <input class="form-input" id="adminAuditTargetType" type="text"
+                                   placeholder="Cible (booking, refund, ticket)" autocomplete="off">
+                            <input class="form-input" id="adminAuditTargetId" type="text"
+                                   placeholder="Identifiant de la cible" autocomplete="off">
+                            <button type="submit" class="admin-search-btn" aria-label="Filtrer">
+                                <i class="material-icons-round">filter_alt</i>
+                            </button>
+                        </form>
+                        <div id="adminAuditList">
+                            <span class="admin-placeholder">Chargement…</span>
+                        </div>
+                        </details>
+                    </div>
+
                     <!-- Engagement : statistiques de likes -->
                     <div class="admin-card" data-admin-section="engagement" hidden>
                         <h3 class="admin-card-title">
@@ -579,6 +708,12 @@ export class AdminPage extends HTMLElement {
     }
 
     _bindEvents() {
+        this.addEventListener('open-booking-detail', event => this._openPaymentCase(event.detail.bookingId));
+        this.addEventListener('close-booking-detail', () => {
+            this._detailGeneration = (this._detailGeneration || 0) + 1;
+            const detail = this.querySelector('#adminPaymentDetail');
+            if (detail) detail.innerHTML = '';
+        });
         this.querySelector('.admin-back')?.addEventListener('click', () => {
             // Le retour ramène d'abord à l'accueil de la console : quitter la
             // page entière demande un second geste, explicite.
@@ -635,6 +770,15 @@ export class AdminPage extends HTMLElement {
             this._userFilters = { q: '', device: '', blocked: false, admin: false, page: 1 };
             this._renderUserFilters();
             this._loadUserDirectory();
+        });
+
+        this.querySelector('#adminPaymentForm')?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            this._loadPayments();
+        });
+        this.querySelector('#adminAuditForm')?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            this._loadAudit();
         });
     }
 
@@ -754,6 +898,8 @@ export class AdminPage extends HTMLElement {
                 return this._loadCampaigns(this._takePrefetch('campaigns'));
             case 'users':
                 return this._loadUserDirectory(this._takePrefetch('users'));
+            case 'payments':
+                return Promise.all([this.querySelector('payment-cases')?.load(), this._loadPayments(), this._loadAudit(), this.querySelector('finance-operations')?.load()]);
             case 'engagement':
                 return this._loadEngagement(this._takePrefetch('engagement'));
             case 'indicators':
@@ -783,7 +929,7 @@ export class AdminPage extends HTMLElement {
      */
     async _loadSummaries() {
         this._summary = {};
-        const [outbox, features, catalogs, campaigns, users, engagement, templates, indicators] = await Promise.all([
+        const [outbox, features, catalogs, campaigns, users, engagement, templates, indicators, payments] = await Promise.all([
             this._grab('outbox', () => api.getAdminOutbox()),
             this._grab('engine', () => api.getFeatures('notification')),
             this._grab('catalog', () => api.getAdminCatalog()),
@@ -792,6 +938,16 @@ export class AdminPage extends HTMLElement {
             this._grab('engagement', () => api.getAdminStats()),
             this._grab('templates', () => api.getAdminNotificationTemplates()),
             this._grab('indicators', () => api.getAdminIndicators()),
+            this._grab('payments', async () => {
+                const [due, pending] = await Promise.all([
+                    api.getAdminPayments({ status: 'refund_due', limit: 100 }),
+                    api.getAdminPayments({ payment_status: 'pending', limit: 100 }),
+                ]);
+                return {
+                    refundDue: (due?.items || []).length,
+                    pending: (pending?.items || []).length,
+                };
+            }),
         ]);
         const counts = outbox?.counts || {};
         const waiting = Number(counts.pending || 0);
@@ -833,6 +989,10 @@ export class AdminPage extends HTMLElement {
 
         this._setTileMetric('users', users
             ? `${formatCount(users.total ?? users.users?.length ?? 0)} compte(s)`
+            : 'Indisponible');
+
+        this._setTileMetric('payments', payments
+            ? `${formatCount(payments.refundDue)} à rembourser · ${formatCount(payments.pending)} en attente`
             : 'Indisponible');
 
         this._setTileMetric('engagement', engagement
@@ -1036,6 +1196,256 @@ export class AdminPage extends HTMLElement {
             </dl>
             ${entry.last_reason
                 ? `<div class="admin-journal-error">${escapeHtml(reasonLabel(entry.last_reason))}</div>` : ''}
+        `;
+    }
+
+    // ─── Dossiers de paiement et journal (EXP-01) ───────────────────
+
+    /** Recherche des dossiers : sans filtre, les plus récents d'abord. */
+    async _loadPayments() {
+        const container = this.querySelector('#adminPaymentResults');
+        if (!container) return;
+        const detail = this.querySelector('#adminPaymentDetail');
+        if (detail) detail.innerHTML = '';
+        container.innerHTML = '<span class="admin-placeholder">Chargement…</span>';
+
+        const read = (id) => this.querySelector(id)?.value.trim() || '';
+        try {
+            const data = await api.getAdminPayments({
+                booking_id: read('#adminPaymentBooking'),
+                user_id: read('#adminPaymentUser'),
+                desire_id: read('#adminPaymentDesire'),
+                status: read('#adminPaymentStatus'),
+                payment_status: read('#adminPaymentAttemptStatus'),
+                limit: 30,
+            });
+            this._renderPaymentCases(data?.items || []);
+        } catch (err) {
+            container.innerHTML = this._error(err);
+        }
+    }
+
+    _renderPaymentCases(items) {
+        const container = this.querySelector('#adminPaymentResults');
+        if (!container) return;
+        if (!items.length) {
+            container.innerHTML = this._message('Aucun dossier ne correspond à ces filtres.');
+            return;
+        }
+        container.innerHTML = items.map((item) => {
+            const facts = [
+                CASE_STATUS_LABELS[item.status] || item.status,
+                formatAmount(item.total_amount, item.currency),
+                `paiement : ${PAYMENT_STATUS_LABELS[item.payment_status] || item.payment_status}`,
+                `billet : ${TICKET_STATUS_LABELS[item.ticket_status] || item.ticket_status}`,
+            ];
+            if (item.refund_status !== 'none') {
+                facts.push(`remboursement : ${REFUND_STATUS_LABELS[item.refund_status] || item.refund_status}`);
+            }
+            if (Number(item.held_amount) > 0) {
+                facts.push(`retenue : ${formatAmount(item.held_amount, item.currency)}`);
+            }
+            return `
+                <button type="button" class="admin-user-row" data-booking-id="${escapeHtml(String(item.booking_id))}">
+                    <div class="admin-user-text">
+                        <span class="admin-user-pseudo">${escapeHtml(item.desire_title || '—')}</span>
+                        <span class="admin-user-phone">${escapeHtml(item.participant_name || '—')} · ${escapeHtml(item.organizer_name || '—')}</span>
+                        <span class="admin-user-meta">${escapeHtml(facts.join(' · '))}</span>
+                    </div>
+                    <span class="admin-badge">${escapeHtml(formatDateTime(item.created_at))}</span>
+                </button>
+            `;
+        }).join('');
+
+        container.querySelectorAll('.admin-user-row').forEach((row) => {
+            row.addEventListener('click', () => this._openPaymentCase(row.dataset.bookingId));
+        });
+    }
+
+    /** Détail d'un dossier : tout ce que l'exploitation doit lire avant de décider. */
+    async _openPaymentCase(bookingId) {
+        const generation = this._detailGeneration = (this._detailGeneration || 0) + 1;
+        const container = this.querySelector('#adminPaymentDetail');
+        if (!container) return;
+        container.innerHTML = '<span class="admin-placeholder">Chargement…</span>';
+        try {
+            const detail = await api.getAdminPaymentDetail(bookingId);
+            if (generation !== this._detailGeneration) return;
+            container.innerHTML = this._paymentCaseHtml(detail);
+            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const examine = document.createElement('button');
+            examine.className = 'admin-user-btn';
+            examine.textContent = 'Ouvrir un examen de ce dossier';
+            examine.onclick = () => {
+                const operations = this.querySelector('finance-operations');
+                if (operations?.parentElement?.tagName === 'DETAILS') operations.parentElement.open = true;
+                operations?.scrollIntoView({ behavior: 'smooth' });
+                operations?.form('Examen financier', [], v => [
+                `/admin/finance/bookings/${bookingId}/disputes`, {reason:v.reason,evidence_ids:v.evidence?[v.evidence]:[]}
+                ]);
+            };
+            container.appendChild(examine);
+            const journal = await api.financeRequest(`/admin/finance/bookings/${encodeURIComponent(bookingId)}/ledger`);
+            if (generation !== this._detailGeneration) return;
+            container.insertAdjacentHTML('beforeend', `<details><summary>Journal comptable (500 écritures maximum)</summary>${journal.items.map(row =>
+                `<p>${escapeHtml(row.kind)} · ${escapeHtml(row.category)} · ${escapeHtml(row.direction === 'credit' ? 'Crédit' : 'Débit')} ${escapeHtml(String(row.amount))} ${escapeHtml(row.currency)}</p>`
+            ).join('') || '<p>Aucune écriture.</p>'}</details>`);
+            container.querySelector('.admin-payment-close')?.addEventListener('click', () => {
+                container.innerHTML = '';
+            });
+        } catch (err) {
+            if (generation === this._detailGeneration) container.innerHTML = this._error(err);
+        }
+    }
+
+    _paymentCaseHtml(detail) {
+        const item = detail?.case || {};
+        const currency = item.currency || 'XOF';
+        const held = Number(item.held_amount || 0);
+        const milestones = [];
+        if (item.confirmed_at) milestones.push(['Paiement confirmé', item.confirmed_at]);
+        for (const ticket of detail?.tickets || []) {
+            milestones.push(['Billet émis', ticket.issued_at]);
+            if (ticket.scanned_at) milestones.push(['QR code scanné', ticket.scanned_at]);
+            if (ticket.voided_at) milestones.push(['Billet annulé', ticket.voided_at]);
+        }
+        for (const entry of detail?.audit || []) {
+            if (entry.action === 'scan_ticket' && entry.outcome === 'success' && entry.details?.released_net != null) {
+                milestones.push([`Net débloqué · ${formatAmount(entry.details.released_net,currency)}`, entry.created_at]);
+            }
+        }
+        const timeline = `<div class="flow-card" style="margin-top:16px"><div class="flow-row"><h3>${escapeHtml(item.participant_name || 'Participant')}</h3><button class="flow-link admin-payment-close" type="button">Fermer</button></div><p class="flow-muted">Participation · ${escapeHtml(formatAmount(item.total_amount,currency))}</p><p class="flow-muted">${escapeHtml(TICKET_STATUS_LABELS[item.ticket_status] || 'Billet non émis')}</p>${milestones.sort((a,b) => new Date(a[1])-new Date(b[1])).map(([label,date]) => `<div class="flow-timeline"><i class="material-icons-round">check_circle</i><div><strong>${escapeHtml(label)}</strong><p class="flow-muted">${escapeHtml(formatDateTime(date))}</p></div></div>`).join('') || '<p class="flow-muted">Aucune étape confirmée.</p>'}</div>`;
+
+        const summary = `
+            <div class="admin-journal-row">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(item.desire_title || '—')}</span>
+                    <button type="button" class="admin-user-btn admin-payment-close">Fermer</button>
+                </div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(`${item.participant_name || '—'} · ${item.organizer_name || '—'} · événement du ${formatDateTime(item.event_date)}`)}
+                </div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(`${CASE_STATUS_LABELS[item.status] || item.status} · ${PAYMENT_STATUS_LABELS[item.payment_status] || item.payment_status} · billet ${TICKET_STATUS_LABELS[item.ticket_status] || item.ticket_status}`)}
+                </div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(`prix ${formatAmount(item.price_amount, currency)} + frais ${formatAmount(item.participant_fee, currency)} = ${formatAmount(item.total_amount, currency)}`)}
+                </div>
+                ${held > 0 ? `<div class="admin-journal-meta">Retenue en cours : ${escapeHtml(formatAmount(held, currency))}</div>` : ''}
+                <div class="admin-journal-meta">Réservation ${escapeHtml(String(item.booking_id))}</div>
+            </div>
+        `;
+
+        const attempts = (detail?.attempts || []).map((row) => `
+            <div class="admin-journal-row">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(`Tentative ${row.operation}`)}</span>
+                    <span class="admin-badge">${escapeHtml(row.status)}</span>
+                </div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(`${formatAmount(row.amount, row.currency)} · ${row.provider} · ${row.verification_status}`)}
+                </div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(`Référence ${row.merchant_reference}${row.provider_reference ? ` · prestataire ${row.provider_reference}` : ''}`)}
+                </div>
+                ${row.failure_reason ? `<div class="admin-journal-meta">${escapeHtml(row.failure_reason)}</div>` : ''}
+            </div>
+        `).join('');
+
+        const tickets = (detail?.tickets || []).map((row) => `
+            <div class="admin-journal-row">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(`Billet ${row.id}`)}</span>
+                    <span class="admin-badge">${escapeHtml(TICKET_STATUS_LABELS[row.status] || row.status)}</span>
+                </div>
+                <div class="admin-journal-meta">${escapeHtml(`Émis le ${formatDateTime(row.issued_at)}`)}</div>
+                ${row.void_reason ? `<div class="admin-journal-meta">${escapeHtml(row.void_reason)}</div>` : ''}
+            </div>
+        `).join('');
+
+        const refunds = (detail?.refunds || []).map((row) => `
+            <div class="admin-journal-row">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(`Remboursement ${formatAmount(row.amount, row.currency)}`)}</span>
+                    <span class="admin-badge">${escapeHtml(REFUND_STATUS_LABELS[row.status] || row.status)}</span>
+                </div>
+                <div class="admin-journal-meta">${escapeHtml(row.reason)}</div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(`Version ${row.version}${row.provider_reference ? ` · référence ${row.provider_reference}` : ''}`)}
+                </div>
+                ${row.proof_reference ? `<div class="admin-journal-meta">${escapeHtml(`Preuve : ${row.proof_reference}`)}</div>` : ''}
+                ${row.last_error ? `<div class="admin-journal-meta">${escapeHtml(row.last_error)}</div>` : ''}
+            </div>
+        `).join('');
+
+        const disputes = (detail?.disputes || []).map((row) => `
+            <div class="admin-journal-row">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(`Litige ${row.scope}`)}</span>
+                    <span class="admin-badge">${escapeHtml(row.status)}</span>
+                </div>
+                <div class="admin-journal-meta">
+                    ${escapeHtml(`Retenue ${formatAmount(row.held_amount, row.currency || currency)} · ${row.reason}`)}
+                </div>
+                ${row.resolution ? `<div class="admin-journal-meta">${escapeHtml(row.resolution)}</div>` : ''}
+            </div>
+        `).join('');
+
+        const audit = (detail?.audit || []).map((row) => this._auditRow(row)).join('');
+        const block = (title, rows) => rows
+            ? `<h4 class="admin-section-title">${escapeHtml(title)}</h4>${rows}`
+            : '';
+
+        return `
+            ${timeline}
+            <details class="flow-details"><summary>Détails et pièces du dossier</summary>
+            ${summary}
+            ${block('Tentatives', attempts)}
+            ${block('Billets', tickets)}
+            ${block('Remboursements', refunds)}
+            ${block('Litiges', disputes)}
+            ${block('Journal du dossier', audit)}
+            </details>
+        `;
+    }
+
+    /** Journal global : filtres d'action, de cible et d'identifiant. */
+    async _loadAudit() {
+        const container = this.querySelector('#adminAuditList');
+        if (!container) return;
+        container.innerHTML = '<span class="admin-placeholder">Chargement…</span>';
+
+        const read = (id) => this.querySelector(id)?.value.trim() || '';
+        try {
+            const data = await api.getAdminAudit({
+                action: read('#adminAuditAction'),
+                target_type: read('#adminAuditTargetType'),
+                target_id: read('#adminAuditTargetId'),
+                limit: 50,
+            });
+            const items = data?.items || [];
+            container.innerHTML = items.length
+                ? items.map((row) => this._auditRow(row)).join('')
+                : this._message('Aucune décision enregistrée pour ces filtres.');
+        } catch (err) {
+            container.innerHTML = this._error(err);
+        }
+    }
+
+    _auditRow(row) {
+        const target = `${row.target_type || '—'} ${row.target_id || ''}`.trim();
+        const actor = row.actor_id
+            ? `${row.actor_id}${row.actor_role ? ` (${row.actor_role})` : ''}`
+            : 'système';
+        return `
+            <div class="admin-journal-row">
+                <div class="admin-journal-head">
+                    <span class="admin-journal-type">${escapeHtml(row.action || '—')}</span>
+                    <span class="admin-badge">${escapeHtml(AUDIT_OUTCOME_LABELS[row.outcome] || row.outcome)}</span>
+                </div>
+                <div class="admin-journal-meta">${escapeHtml(`${target} · ${actor} · ${formatDateTime(row.created_at)}`)}</div>
+                ${row.correlation_id ? `<div class="admin-journal-meta">${escapeHtml(`Rapport : ${row.correlation_id}`)}</div>` : ''}
+            </div>
         `;
     }
 

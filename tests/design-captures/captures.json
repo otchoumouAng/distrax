@@ -1,0 +1,169 @@
+[
+  {
+    "file": "participant-confirmation-light.png",
+    "title": "Confirmer ma place",
+    "actor": "Participant",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "participant-billet-light.png",
+    "title": "Mon billet",
+    "actor": "Participant",
+    "theme": "light",
+    "height": 856
+  },
+  {
+    "file": "participant-recu-light.png",
+    "title": "Reçu de paiement",
+    "actor": "Participant",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "organisateur-paiements-light.png",
+    "title": "Paiements de l’envie",
+    "actor": "Organisateur",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "organisateur-scanner-light.png",
+    "title": "Scanner un billet",
+    "actor": "Organisateur",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "organisateur-scan-valide-light.png",
+    "title": "Billet validé",
+    "actor": "Organisateur",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "organisateur-solde-light.png",
+    "title": "Mon solde",
+    "actor": "Organisateur",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "organisateur-retrait-light.png",
+    "title": "Retirer mon argent",
+    "actor": "Organisateur",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "admin-dossiers-light.png",
+    "title": "Dossiers des événements",
+    "actor": "Administration",
+    "theme": "light",
+    "height": 865
+  },
+  {
+    "file": "admin-evenement-light.png",
+    "title": "Dossier de l’événement",
+    "actor": "Administration",
+    "theme": "light",
+    "height": 1110
+  },
+  {
+    "file": "admin-historique-light.png",
+    "title": "Historique du participant",
+    "actor": "Administration",
+    "theme": "light"
+  },
+  {
+    "file": "participant-confirmation-dark.png",
+    "title": "Confirmer ma place",
+    "actor": "Participant",
+    "theme": "dark",
+    "height": 844
+  },
+  {
+    "file": "participant-billet-dark.png",
+    "title": "Mon billet",
+    "actor": "Participant",
+    "theme": "dark",
+    "height": 856
+  },
+  {
+    "file": "participant-recu-dark.png",
+    "title": "Reçu de paiement",
+    "actor": "Participant",
+    "theme": "dark",
+    "height": 844
+  },
+  {
+    "file": "organisateur-paiements-dark.png",
+    "title": "Paiements de l’envie",
+    "actor": "Organisateur",
+    "theme": "dark",
+    "height": 844
+  },
+  {
+    "file": "organisateur-scanner-dark.png",
+    "title": "Scanner un billet",
+    "actor": "Organisateur",
+    "theme": "dark",
+    "height": 844
+  },
+  {
+    "file": "organisateur-scan-valide-dark.png",
+    "title": "Billet validé",
+    "actor": "Organisateur",
+    "theme": "dark",
+    "height": 844
+  },
+  {
+    "file": "organisateur-solde-dark.png",
+    "title": "Mon solde",
+    "actor": "Organisateur",
+    "theme": "dark",
+    "height": 844
+  },
+  {
+    "file": "organisateur-retrait-dark.png",
+    "title": "Retirer mon argent",
+    "actor": "Organisateur",
+    "theme": "dark",
+    "height": 844
+  },
+  {
+    "file": "admin-dossiers-dark.png",
+    "title": "Dossiers des événements",
+    "actor": "Administration",
+    "theme": "dark",
+    "height": 865
+  },
+  {
+    "file": "admin-evenement-dark.png",
+    "title": "Dossier de l’événement",
+    "actor": "Administration",
+    "theme": "dark",
+    "height": 1110
+  },
+  {
+    "file": "admin-historique-dark.png",
+    "title": "Historique du participant",
+    "actor": "Administration",
+    "theme": "dark",
+    "height": 1504
+  },
+  {
+    "file": "organisateur-confirmation-retrait-light.png",
+    "title": "Confirmer le retrait (devis fictif)",
+    "actor": "Organisateur",
+    "theme": "light",
+    "height": 844
+  },
+  {
+    "file": "organisateur-confirmation-retrait-dark.png",
+    "title": "Confirmer le retrait (devis fictif)",
+    "actor": "Organisateur",
+    "theme": "dark",
+    "height": 844
+  }
+]

@@ -7,6 +7,18 @@ import {
     isLikeDisabled,
     parseLikeCount,
 } from '../../utils/desireLikes.js';
+import {
+    REFUND_STATUS_LABELS,
+    clearPendingPayment,
+    formatAmount,
+    formatDeadline,
+    isPaidJourney,
+    readPendingPayment,
+    rememberPendingPayment,
+    rememberReceiptTarget,
+    rememberTicketTarget,
+    resumePendingPayment,
+} from '../../utils/paymentFlow.js';
 
 export class DesireDetailsPage extends HTMLElement {
     constructor() {
@@ -21,6 +33,24 @@ export class DesireDetailsPage extends HTMLElement {
         this._isPast = false;      // si l'activité a déjà eu lieu (catalogue conservé)
         this._isAccepted = false;  // accepté, présence pas encore confirmée (PAR-08)
         this._isConfirmed = false; // présence confirmée (PAR-08)
+        this._isRejected = false;  // participation refusée (footer masqué)
+        // ── Parcours payant (PAR-01 à PAR-05) ───────────────────
+        this._paidJourney = false;   // la plateforme encaisse le participant
+        this._priceType = '';
+        this._priceAmount = null;
+        this._payMode = '';
+        this._paymentPolicy = '';
+        this._currency = 'XOF';
+        this._eventEndAt = null;
+        this._eventTimezone = null;
+        this._bookingId = null;
+        this._ticketId = null;
+        this._paymentId = null;
+        this._booking = null;        // dernière réservation lue côté serveur
+        this._bookingStatus = '';    // confirmed | refund_due | cancelled | expired
+        this._quote = null;          // devis affiché (prix total + échéance)
+        this._pendingPayment = null; // paiement ouvert, en attente de vérification
+        this._refund = null;         // suivi du remboursement (PAR-05)
         this._likeCount = 0;       // nombre de likes de l'envie affichée
         this._likedByMe = false;   // l'utilisateur a-t-il aimé cette envie
         this._desireStatus = '';   // statut du cycle de vie (CAT-04)
@@ -214,14 +244,45 @@ export class DesireDetailsPage extends HTMLElement {
                     width: 100%;
                     padding: 14px 24px; background: var(--glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
                     border-top: 1px solid var(--border-light); z-index: 100;
-                    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+                    display: flex; flex-direction: column; gap: 10px;
                     box-sizing: border-box;
                     min-height: 80px;
                     margin-top: auto;
                 }
+                .footer-row {
+                    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+                    width: 100%;
+                }
                 .price-info { display: flex; flex-direction: column; }
                 .price-val { font-size: 18px; font-weight: 700; color: var(--text-main); }
                 .price-sub { font-size: 12px; color: var(--text-muted); }
+
+                /* Récapitulatif de paiement (PAR-01) */
+                .payment-recap {
+                    display: none; width: 100%; padding: 10px 12px;
+                    border-radius: 12px; background: rgba(16, 185, 129, 0.06);
+                    border: 1px solid rgba(16, 185, 129, 0.22);
+                    box-sizing: border-box;
+                }
+                .payment-recap-row {
+                    display: flex; justify-content: space-between; align-items: baseline;
+                    font-size: 12px; color: var(--text-muted); padding: 2px 0;
+                }
+                .payment-recap-row strong { font-size: 13px; color: var(--text-main); }
+                .payment-recap-note {
+                    font-size: 11px; line-height: 1.4; color: var(--text-muted);
+                    margin-top: 6px;
+                }
+                .payment-recap-actions {
+                    display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px;
+                }
+                .payment-recap-link {
+                    border: none; background: none; padding: 0; cursor: pointer;
+                    font-size: 12px; font-weight: 600; color: var(--primary);
+                    text-decoration: underline; font-family: inherit;
+                }
+                .payment-recap-link.danger { color: #dc2626; }
+                .payment-recap-link:disabled { opacity: .5; cursor: default; }
 
                 .join-action-btn {
                     /* taille auto — ne s'étire pas */
@@ -457,23 +518,26 @@ export class DesireDetailsPage extends HTMLElement {
                 </div>
 
                 <div class="details-footer">
-                    <div class="price-info">
-                        <span class="price-val" id="dPrice">15 000 FCFA</span>
-                        <span class="price-sub">Par personne</span>
-                    </div>
-                    <div class="footer-actions">
-                        <button class="invite-action-btn" id="inviteActionBtn" type="button"
-                                aria-label="Inviter des proches à rejoindre cette envie"
-                                title="Inviter des proches à rejoindre" style="display: none;">
-                            <i class="material-icons-round">person_add</i>
-                            <span>Inviter</span>
-                        </button>
-                        <button class="details-like-btn" id="likeActionBtn" type="button"
-                                aria-pressed="false" aria-label="Aimer cette envie" title="Aimer cette envie">
-                            <i class="material-icons-round">favorite_border</i>
-                            <span class="like-count" id="likeCount">0</span>
-                        </button>
-                        <button class="join-action-btn" id="joinActionBtn">Rejoindre</button>
+                    <div class="payment-recap" id="dPaymentRecap"></div>
+                    <div class="footer-row">
+                        <div class="price-info">
+                            <span class="price-val" id="dPrice">15 000 FCFA</span>
+                            <span class="price-sub" id="dPriceSub">Par personne</span>
+                        </div>
+                        <div class="footer-actions">
+                            <button class="invite-action-btn" id="inviteActionBtn" type="button"
+                                    aria-label="Inviter des proches à rejoindre cette envie"
+                                    title="Inviter des proches à rejoindre" style="display: none;">
+                                <i class="material-icons-round">person_add</i>
+                                <span>Inviter</span>
+                            </button>
+                            <button class="details-like-btn" id="likeActionBtn" type="button"
+                                    aria-pressed="false" aria-label="Aimer cette envie" title="Aimer cette envie">
+                                <i class="material-icons-round">favorite_border</i>
+                                <span class="like-count" id="likeCount">0</span>
+                            </button>
+                            <button class="join-action-btn" id="joinActionBtn">Rejoindre</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -504,6 +568,18 @@ export class DesireDetailsPage extends HTMLElement {
         if (backBtn) {
             backBtn.addEventListener('click', () => {
                 window.dispatchEvent(new CustomEvent('navigate-back', { bubbles: true, composed: true }));
+            });
+        }
+
+        // ── Récapitulatif de paiement (PAR-01 / PAR-05) ─────────
+        const paymentRecap = this.querySelector('#dPaymentRecap');
+        if (paymentRecap) {
+            paymentRecap.addEventListener('click', (event) => {
+                const actionEl = event.target.closest('[data-payment-action]');
+                if (!actionEl) return;
+                const action = actionEl.dataset.paymentAction;
+                if (action === 'receipt') this._openReceipt();
+                else if (action === 'cancel') this._cancelPaidBooking(actionEl);
             });
         }
 
@@ -655,6 +731,14 @@ export class DesireDetailsPage extends HTMLElement {
 
                 const isLeaving = this._hasJoined;
 
+                // ── Parcours payant (PAR-01 / PAR-02 / PAR-05) ────────
+                // Aucun résultat n'est décidé ici : le paiement est ouvert chez
+                // CinetPay puis vérifié côté serveur à la reprise.
+                if (this._paidJourney) {
+                    await this._handlePaidAction(joinBtn, api);
+                    return;
+                }
+
                 // ── Confirmer la présence après acceptation (PAR-08) ──
                 if (this._isAccepted && !this._isConfirmed) {
                     joinBtn.disabled = true;
@@ -788,6 +872,35 @@ export class DesireDetailsPage extends HTMLElement {
             if (priceInfo) priceInfo.style.display = 'none';
             btn.style.display = 'none';
             if (footer) footer.style.display = '';
+        } else if (this._paidJourney && this._bookingStatus === 'confirmed') {
+            // Participation payante confirmée : le billet est l'action principale (PAR-03).
+            if (footer) footer.style.display = '';
+            btn.classList.remove('joined');
+            btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+            btn.style.color = 'white';
+            btn.style.cursor = 'pointer';
+            btn.style.pointerEvents = 'auto';
+            btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;">confirmation_number</i> Voir mon billet';
+        } else if (this._paidJourney && (this._bookingStatus === 'refund_due' || this._bookingStatus === 'cancelled')) {
+            // Place libérée : plus aucune action d'inscription, le reçu reste lisible (PAR-05).
+            if (footer) footer.style.display = '';
+            btn.classList.remove('joined');
+            btn.style.background = 'rgba(239, 68, 68, 0.1)';
+            btn.style.color = '#b91c1c';
+            btn.style.cursor = 'default';
+            btn.style.pointerEvents = 'none';
+            btn.innerHTML = this._bookingStatus === 'cancelled'
+                ? '<i class="material-icons-round" style="font-size:18px;">cancel</i> Participation annulée'
+                : '<i class="material-icons-round" style="font-size:18px;">hourglass_bottom</i> Remboursement en cours';
+        } else if (this._paidJourney && this._pendingPayment) {
+            // Paiement ouvert : l'état reste « en attente » tant que le serveur n'a pas tranché.
+            if (footer) footer.style.display = '';
+            btn.classList.remove('joined');
+            btn.style.background = 'linear-gradient(135deg, #f59e0b, #f97316)';
+            btn.style.color = 'white';
+            btn.style.cursor = 'pointer';
+            btn.style.pointerEvents = 'auto';
+            btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;">hourglass_top</i> Vérifier le paiement';
         } else if (this._isFull) {
             // Envie complète : bouton désactivé
             if (footer) footer.style.display = '';
@@ -828,8 +941,345 @@ export class DesireDetailsPage extends HTMLElement {
             btn.style.pointerEvents = 'auto';
             btn.style.cursor = 'pointer';
             btn.style.color = 'white';
-            btn.innerHTML = 'Rejoindre';
+            btn.innerHTML = this._paidJourney ? 'Payer et rejoindre' : 'Rejoindre';
         }
+    }
+
+    /* ── Parcours payant : paiement, billet, annulation (PAR-01 à PAR-05) ── */
+
+    /**
+     * Action du bouton principal pour une envie payante.
+     * Aucun état n'est déduit du retour navigateur : seul `GET /payments/{id}`
+     * (via la reprise) peut confirmer un paiement.
+     */
+    async _handlePaidAction(btn, api) {
+        if (this._bookingStatus === 'confirmed' && this._bookingId) {
+            this._openTicket();
+            return;
+        }
+        if (this._bookingStatus === 'refund_due' || this._bookingStatus === 'cancelled') {
+            return;
+        }
+        if (this._pendingPayment) {
+            await this._verifyPendingPayment(btn);
+            return;
+        }
+        await this._startPaidCheckout(btn, api);
+    }
+
+    /** Devis → réservation → tentative, puis redirection vers CinetPay. */
+    async _startPaidCheckout(btn, api) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;animation: spin 1s linear infinite;vertical-align:middle;">autorenew</i> Redirection…';
+        try {
+            const quote = await api.createPaymentQuote(this._desireId);
+            this._quote = quote;
+            this._renderPaymentRecap();
+
+            const { confirmPaymentQuote } = await import('../ui/PaymentConfirmation.js');
+            const confirmed = await confirmPaymentQuote({ quote,
+                title: this.querySelector('#dTitle')?.textContent || 'Votre envie',
+                location: this.querySelector('#dAddress')?.textContent || this.querySelector('#dCommune')?.textContent || '',
+            });
+            if (!confirmed) { btn.disabled = false; this._updateJoinButton(btn); return; }
+
+            const booking = await api.createBooking(this._desireId, { quoteId: quote.id });
+            this._bookingId = booking.id;
+            this._bookingStatus = booking.status;
+
+            const payment = await api.createPaymentAttempt(booking.id);
+            if (!payment?.checkout_url) {
+                throw new Error('Le lien de paiement est momentanément indisponible.');
+            }
+
+            // Mémorisé avant la sortie : au retour, la SPA revérifie l'état réel.
+            rememberPendingPayment({
+                paymentId: payment.id,
+                bookingId: booking.id,
+                desireId: this._desireId,
+            });
+            window.location.assign(payment.checkout_url);
+        } catch (err) {
+            btn.disabled = false;
+            this._updateJoinButton(btn);
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: this._paymentErrorMessage(err), type: 'error' },
+            }));
+        }
+    }
+
+    /** Vérifie un paiement laissé en attente (retour CinetPay ou reconnexion). */
+    async _verifyPendingPayment(btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="material-icons-round" style="font-size:18px;animation: spin 1s linear infinite;vertical-align:middle;">autorenew</i> Vérification…';
+        try {
+            const outcome = await resumePendingPayment();
+            if (outcome?.outcome === 'succeeded') {
+                const { api } = await import('../../api.js');
+                await this._resolveSucceededPayment(api, outcome.pending, outcome.payment);
+            } else if (outcome?.outcome === 'failed') {
+                this._pendingPayment = null;
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: { message: 'Le paiement a été refusé. Vous pouvez réessayer.', type: 'error' },
+                }));
+            } else {
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: { message: 'Paiement toujours en attente de confirmation.', type: 'info' },
+                }));
+            }
+        } catch (err) {
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: this._paymentErrorMessage(err), type: 'error' },
+            }));
+        } finally {
+            btn.disabled = false;
+            this._renderPaymentRecap();
+            this._updateJoinButton(btn);
+        }
+    }
+
+    /** Appelé une fois le statut de participation connu. */
+    async _loadPaidState(api) {
+        if (!this._paidJourney) return;
+        if (this._bookingStatus === 'confirmed'
+            || this._bookingStatus === 'refund_due'
+            || this._bookingStatus === 'cancelled') {
+            await this._loadBookingState(api);
+            return;
+        }
+        await this._checkPendingPayment(api);
+    }
+
+    /** Reprend le paiement mémorisé pour cette envie, sans jamais le supposer abouti. */
+    async _checkPendingPayment(api) {
+        const pending = readPendingPayment();
+        if (!pending?.paymentId) return;
+        if (pending.desireId && String(pending.desireId) !== String(this._desireId)) return;
+
+        this._pendingPayment = pending;
+        try {
+            const payment = await api.getPayment(pending.paymentId);
+            this._paymentId = payment.id;
+            if (payment.booking_id) this._bookingId = payment.booking_id;
+
+            if (payment.status === 'succeeded') {
+                await this._resolveSucceededPayment(api, pending, payment);
+            } else if (payment.status === 'failed') {
+                clearPendingPayment({ paymentId: pending.paymentId });
+                this._pendingPayment = null;
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: { message: 'Le paiement a été refusé. Vous pouvez réessayer.', type: 'error' },
+                }));
+            }
+        } catch (err) {
+            // Réseau indisponible : l'état « en attente » est conservé tel quel.
+            console.warn('[DesireDetails] Vérification du paiement impossible:', err.message);
+        }
+        this._renderPaymentRecap();
+    }
+
+    async _resolveSucceededPayment(api, pending, payment) {
+        clearPendingPayment({ paymentId: pending.paymentId });
+        this._pendingPayment = null;
+        this._bookingId = pending.bookingId || payment.booking_id || this._bookingId;
+        this._paymentId = payment.id;
+        await this._loadBookingState(api);
+        if (!this._bookingStatus || this._bookingStatus === 'held') {
+            this._bookingStatus = 'confirmed';
+            this._hasJoined = true;
+            this._ticketId = payment.ticket_id || this._ticketId;
+        }
+        window.dispatchEvent(new CustomEvent('show-toast', {
+            detail: { message: 'Paiement confirmé. Votre billet est disponible.', type: 'success' },
+        }));
+    }
+
+    /** Relit la réservation : échéance d'annulation, billet et remboursement. */
+    async _loadBookingState(api) {
+        if (!this._bookingId) return;
+        try {
+            const booking = await api.getBooking(this._bookingId);
+            this._booking = booking;
+            this._bookingStatus = booking.status;
+            this._ticketId = booking.ticket_id || this._ticketId;
+            this._paymentId = booking.payment_id || this._paymentId;
+
+            if (booking.refund_id) {
+                try {
+                    this._refund = await api.getRefund(booking.refund_id);
+                } catch {
+                    this._refund = null;
+                }
+            } else {
+                this._refund = null;
+            }
+
+            if (booking.status === 'expired') {
+                this._hasJoined = false;
+            } else if (booking.status === 'confirmed') {
+                this._hasJoined = true;
+            }
+            this._renderPaymentRecap();
+        } catch (err) {
+            console.warn('[DesireDetails] Réservation indisponible:', err.message);
+        }
+    }
+
+    /** Récapitulatif : prix total, frais éventuels et limite d'annulation (PAR-01). */
+    _renderPaymentRecap() {
+        const recap = this.querySelector('#dPaymentRecap');
+        if (!recap) return;
+
+        if (!this._paidJourney) {
+            recap.style.display = 'none';
+            recap.innerHTML = '';
+            return;
+        }
+        recap.style.display = 'block';
+
+        const quote = this._quote;
+        const booking = this._booking;
+        const currency = quote?.currency || booking?.currency || this._currency || 'XOF';
+        const total = quote?.total_amount ?? booking?.total_amount ?? this._priceAmount;
+        const fee = Number(quote?.participant_fee || 0);
+        const deadline = booking?.cancellation_deadline || quote?.cancellation_deadline || null;
+        const cancelAllowed = booking
+            ? (booking.allowed_actions || []).includes('cancel')
+            : (quote ? quote.cancellation_available === true : null);
+
+        const rows = [];
+        if (total != null) {
+            rows.push(`<div class="payment-recap-row"><span>Prix total</span><strong>${escapeHtml(formatAmount(total, currency))}</strong></div>`);
+        }
+        if (fee > 0) {
+            rows.push(`<div class="payment-recap-row"><span>Frais de service</span><strong>${escapeHtml(formatAmount(fee, currency))}</strong></div>`);
+        }
+
+        let note;
+        if (this._pendingPayment) {
+            note = 'Paiement en attente de confirmation : le statut sera vérifié auprès du serveur.';
+        } else if (this._bookingStatus === 'cancelled') {
+            const refundLabel = REFUND_STATUS_LABELS[this._refund?.status] || 'Remboursement à suivre depuis votre profil';
+            note = `Participation annulée. ${refundLabel}.`;
+        } else if (this._bookingStatus === 'refund_due') {
+            note = `${REFUND_STATUS_LABELS[this._refund?.status] || 'Remboursement en cours'}.`;
+        } else if (deadline) {
+            note = cancelAllowed === false
+                ? `Annulation fermée depuis le ${formatDeadline(deadline)}.`
+                : `Annulation possible jusqu'au ${formatDeadline(deadline)}.`;
+        } else {
+            note = 'La limite d\'annulation sera confirmée avant le paiement.';
+        }
+
+        const actions = [];
+        if (this._paymentId && ['confirmed', 'cancelled', 'refund_due'].includes(this._bookingStatus)) {
+            actions.push('<button type="button" class="payment-recap-link" data-payment-action="receipt">Voir le reçu</button>');
+        }
+        if (this._bookingStatus === 'confirmed' && cancelAllowed === true) {
+            actions.push('<button type="button" class="payment-recap-link danger" data-payment-action="cancel">Annuler ma participation</button>');
+        }
+
+        recap.innerHTML = rows.join('')
+            + `<div class="payment-recap-note">${escapeHtml(note)}</div>`
+            + (actions.length ? `<div class="payment-recap-actions">${actions.join('')}</div>` : '');
+
+        const priceEl = this.querySelector('#dPrice');
+        const priceSub = this.querySelector('#dPriceSub');
+        if (priceEl && total != null) priceEl.textContent = formatAmount(total, currency);
+        if (priceSub) priceSub.textContent = 'Prix total';
+    }
+
+    /** Annulation et suivi du remboursement (PAR-05). */
+    async _cancelPaidBooking(trigger) {
+        if (!this._bookingId || this._bookingStatus !== 'confirmed') return;
+        const { api } = await import('../../api.js');
+        const { showConfirm } = await import('../../utils/confirm.js');
+        const ok = await showConfirm({
+            title: 'Annuler votre participation ?',
+            message: 'Votre billet sera invalidé et votre place libérée. Le remboursement sera suivi depuis votre profil.',
+            confirmLabel: 'Oui, annuler',
+            cancelLabel: 'Garder ma place',
+            type: 'danger',
+        });
+        if (!ok) return;
+
+        trigger.disabled = true;
+        try {
+            const refund = await api.cancelBooking(this._bookingId);
+            this._refund = refund;
+            this._bookingStatus = 'cancelled';
+            this._booking = {
+                ...(this._booking || {}),
+                status: 'cancelled',
+                allowed_actions: ['view_receipt', 'report'],
+                refund_id: refund.id,
+            };
+            this._ticketId = null;
+            this._renderPaymentRecap();
+            this._updateJoinButton();
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: {
+                    message: `Participation annulée. ${REFUND_STATUS_LABELS[refund.status] || 'Remboursement en cours'}.`,
+                    type: 'info',
+                },
+            }));
+        } catch (err) {
+            trigger.disabled = false;
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: this._paymentErrorMessage(err), type: 'error' },
+            }));
+        }
+    }
+
+    /** Ouvre le billet personnel (PAR-03/PAR-04) : le jeton n'est jamais reconstruit ici. */
+    _openTicket() {
+        if (!this._bookingId) return;
+        rememberTicketTarget({ bookingId: this._bookingId, desireId: this._desireId });
+        this.close();
+        document.dispatchEvent(new CustomEvent('open-ticket', {
+            bubbles: true,
+            composed: true,
+            detail: { bookingId: this._bookingId, desireId: this._desireId },
+        }));
+    }
+
+    /** Ouvre le reçu stable du paiement (PAR-04). */
+    _openReceipt() {
+        if (!this._paymentId) return;
+        rememberReceiptTarget(this._paymentId);
+        this.close();
+        document.dispatchEvent(new CustomEvent('open-receipt', {
+            bubbles: true,
+            composed: true,
+            detail: { paymentId: this._paymentId },
+        }));
+    }
+
+    /** Traduit les codes d'erreur financiers en message actionnable. */
+    _paymentErrorMessage(err) {
+        const code = err?.code || '';
+        if (code === 'PAYMENTS_DISABLED' || code === 'PAYMENT_UNAVAILABLE') {
+            return 'Le paiement en ligne n\'est pas encore activé.';
+        }
+        if (code === 'QUOTE_EXPIRED' || code === 'BOOKING_EXPIRED') {
+            return 'La réservation a expiré. Relancez le paiement.';
+        }
+        if (code === 'IDEMPOTENCY_IN_PROGRESS') {
+            return 'Une opération est déjà en cours. Réessayez dans un instant.';
+        }
+        if (code === 'IDEMPOTENCY_CONFLICT') {
+            return 'Cette opération a déjà été enregistrée. Actualisez votre participation.';
+        }
+        if (code === 'CANCELLATION_CLOSED') {
+            return 'L\'annulation n\'est plus possible pour cette participation.';
+        }
+        if (code === 'ALREADY_SCANNED') {
+            return 'Ce billet a déjà été scanné ; l\'annulation n\'est plus possible.';
+        }
+        if (code === 'BOOKING_NOT_CANCELLABLE') {
+            return 'Cette réservation ne peut pas être annulée.';
+        }
+        return err?.message || 'Une erreur est survenue. Réessayez.';
     }
 
     /** Contrôleur de like mémoïsé (bascule optimiste + réconciliation). */
@@ -928,6 +1378,24 @@ export class DesireDetailsPage extends HTMLElement {
         this._isAccepted = false;
         this._isConfirmed = false;
 
+        // ── Parcours payant (PAR-01 à PAR-05) : état remis à zéro ──
+        this._paidJourney = false;
+        this._priceType = '';
+        this._priceAmount = null;
+        this._payMode = '';
+        this._paymentPolicy = '';
+        this._currency = 'XOF';
+        this._eventEndAt = null;
+        this._eventTimezone = null;
+        this._bookingId = null;
+        this._ticketId = null;
+        this._paymentId = null;
+        this._booking = null;
+        this._bookingStatus = '';
+        this._quote = null;
+        this._pendingPayment = null;
+        this._refund = null;
+
         // Si on n'a que l'id (ex: après création, ou clic notif), charger les détails
         if (this._desireId && !data.title) {
             try {
@@ -953,11 +1421,55 @@ export class DesireDetailsPage extends HTMLElement {
                     desireStatus: full.desire_status,
                     isPast: full.is_past === true,
                     needs_maintenance: full.needs_maintenance === true,
+                    payment_policy: full.payment_policy,
+                    price_type: full.price_type,
+                    price_amount: full.price_amount,
+                    pay_mode: full.pay_mode,
+                    currency: full.currency,
+                    event_end_at: full.event_end_at,
+                    event_timezone: full.event_timezone,
                 };
             } catch (err) {
                 console.warn('[DesireDetails] Erreur chargement envie par id:', err);
             }
         }
+
+        // La carte d'envie ne transporte pas les champs de paiement : les
+        // compléter côté serveur pour distinguer une envie payante (PAR-01).
+        if (this._desireId && data.payment_policy === undefined) {
+            try {
+                const { api } = await import('../../api.js');
+                const full = await api.getDesire(this._desireId);
+                data = {
+                    ...data,
+                    payment_policy: full.payment_policy,
+                    price_type: full.price_type,
+                    price_amount: full.price_amount,
+                    pay_mode: full.pay_mode,
+                    currency: full.currency,
+                    event_end_at: full.event_end_at,
+                    event_timezone: full.event_timezone,
+                };
+            } catch (err) {
+                console.warn('[DesireDetails] Champs de paiement indisponibles:', err.message);
+            }
+        }
+
+        // ── Éligibilité au parcours payant (PAR-01) ────────────
+        this._priceType = data.price_type || '';
+        this._priceAmount = data.price_amount ?? null;
+        this._payMode = data.pay_mode || '';
+        this._paymentPolicy = data.payment_policy || '';
+        this._currency = data.currency || 'XOF';
+        this._eventEndAt = data.event_end_at || null;
+        this._eventTimezone = data.event_timezone || null;
+        this._paidJourney = isPaidJourney({
+            payment_policy: this._paymentPolicy,
+            price_type: this._priceType,
+            price_amount: this._priceAmount,
+            pay_mode: this._payMode,
+            currency: this._currency,
+        });
 
         // NAV-06 : état annulé détecté depuis le cycle de vie de l'envie.
         this._isCancelled = data.desireStatus === 'cancelled';
@@ -1000,6 +1512,9 @@ export class DesireDetailsPage extends HTMLElement {
         }
         this.querySelector('#dSpots').textContent = data.spots || '';
         this.querySelector('#dPrice').textContent = data.price || 'Gratuit';
+        const priceSub = this.querySelector('#dPriceSub');
+        if (priceSub) priceSub.textContent = this._paidJourney ? 'Prix total' : 'Par personne';
+        this._renderPaymentRecap();
         this.querySelector('#dAvatar').src = data.avatar || DEFAULT_AVATAR_PATH;
         const viewCountWrap = this.querySelector('#dViewCountWrap');
         const viewCountNum = this.querySelector('#dViewCountNum');
@@ -1057,6 +1572,20 @@ export class DesireDetailsPage extends HTMLElement {
 
         // ── Vérification asynchrone de l'état (créateur ? déjà rejoint ?) ──
         await this._checkUserStatus(data);
+
+        // PAR-02 / PAR-03 / PAR-05 : relire la réservation ou reprendre un
+        // paiement laissé en attente. Le retour CinetPay ne fait jamais preuve.
+        if (this._paidJourney && this._desireId) {
+            try {
+                const { api } = await import('../../api.js');
+                if (api.isAuthenticated()) {
+                    await this._loadPaidState(api);
+                }
+            } catch (err) {
+                console.warn('[DesireDetails] État de paiement indisponible:', err.message);
+            }
+            this._updateJoinButton(joinBtn);
+        }
 
         // NAV-05 : mettre en évidence les champs concernés par la modification.
         // PAR-16 : idem pour le lieu exact et la date lors d'un rappel.
@@ -1205,6 +1734,27 @@ export class DesireDetailsPage extends HTMLElement {
      */
     _applyJoinStatus(match) {
         if (!match) return;
+        // Les entrées issues de `paid_bookings` portent `booking_id` : leur
+        // statut est celui de la réservation (PAR-02 / PAR-05), pas celui d'une
+        // participation gratuite.
+        if (match.booking_id) {
+            this._bookingId = match.booking_id;
+            this._ticketId = match.ticket_id || null;
+            this._paymentId = match.payment_id || null;
+            if (match.status === 'confirmed') {
+                this._hasJoined = true;
+                this._isConfirmed = true;
+                this._bookingStatus = 'confirmed';
+            } else if (match.status === 'refund_due') {
+                this._hasJoined = true;
+                this._bookingStatus = 'refund_due';
+            } else if (match.status === 'cancelled') {
+                // Le reçu reste accessible ; la place est libérée.
+                this._hasJoined = true;
+                this._bookingStatus = 'cancelled';
+            }
+            return;
+        }
         if (match.status === 'rejected') {
             this._hasJoined = false;
             this._isRejected = true;

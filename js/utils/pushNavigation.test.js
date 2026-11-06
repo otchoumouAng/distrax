@@ -151,6 +151,8 @@ describe('push notification helpers', () => {
         expect(getNotificationFocus('new_desire')).toBe('page:catalogue');
         expect(getNotificationFocus('recommendation')).toBe('page:catalogue');
         expect(getNotificationFocus('republish')).toBe('page:create-republish');
+        // Billet émis (PAR-04) : le push ouvre la page du billet personnel.
+        expect(getNotificationFocus('ticket_issued')).toBe('page:ticket');
     });
 
     it('retourne null pour les types sans cible ou inconnus', () => {

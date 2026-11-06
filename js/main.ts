@@ -34,6 +34,26 @@ import './components/pages/ResetPasswordPage.js';
 import './components/pages/BoostPage.js';
 import './components/pages/BoostDetailsPage.js';
 import './components/pages/AdminPage.js';
+import './components/pages/TicketPage.js';
+import './components/pages/ReceiptPage.js';
+import './components/pages/WalletPage.js';
+import './components/pages/OrganizerPaymentsPage.js';
+import './components/pages/WithdrawalPage.js';
+import './components/pages/ScannerPage.js';
+import {
+    readReceiptTarget,
+    rememberReceiptTarget,
+    rememberTicketTarget,
+    readTicketTarget,
+    resumePendingPayment,
+} from './utils/paymentFlow.js';
+import {
+    ORGANIZER_PAYMENTS_TARGET_KEY,
+    SCAN_TARGET_KEY,
+    readOrganizerTarget,
+    rememberOrganizerTarget,
+    clearOrganizerTarget,
+} from './utils/organizerView.js';
 
 /* ---------------------------------------------------------------
    4. THÈME — mode clair uniquement
@@ -107,6 +127,18 @@ export function initializeApp() {
     const boostDetailsPage = get<any>('app-boost-details-page');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const adminPage = get<any>('app-admin-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ticketPage = get<any>('app-ticket-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const receiptPage = get<any>('app-receipt-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const walletPage = get<any>('app-wallet-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const withdrawalPage = get<any>('app-withdrawal-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const organizerPaymentsPage = get<any>('app-organizer-payments-page');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scanPage = get<any>('app-scan-page');
 
     // --- Overlay de transition entre pages ---
     const transitionOverlay = document.createElement('div');
@@ -184,6 +216,61 @@ export function initializeApp() {
     let _currentPageId = 'home';
     let _pendingBoostData: { desireId?: string; desireTitle?: string } | null = null;
 
+    /**
+     * Hash d'une page, avec la cible mémorisée quand elle existe. Sans cela,
+     * un rafraîchissement perdrait l'envie ouverte (ORG-02 à ORG-05).
+     */
+    function hashFor(pageId: string): string {
+        if (pageId === 'organizer-payments') {
+            const id = readOrganizerTarget(ORGANIZER_PAYMENTS_TARGET_KEY);
+            return id ? `#organizer-payments/${id}` : '#organizer-payments';
+        }
+        if (pageId === 'scan') {
+            const id = readOrganizerTarget(SCAN_TARGET_KEY);
+            return id ? `#scan/${id}` : '#scan';
+        }
+        if (pageId === 'receipt') {
+            const id = readReceiptTarget();
+            return id ? `#receipt/${id}` : '#receipt';
+        }
+        if (pageId === 'ticket') {
+            const target = readTicketTarget();
+            if (target?.bookingId) return `#ticket/${target.bookingId}`;
+            if (target?.desireId) return `#ticket?desire=${target.desireId}`;
+            return '#ticket';
+        }
+        return `#${pageId}`;
+    }
+
+    /**
+     * Un hash profond (`#organizer-payments/<uuid>`, `#scan/<uuid>`,
+     * `#ticket/<uuid>`) mémorise sa cible avant le montage de la page.
+     */
+    function restoreTargetFromHash(): void {
+        const raw = window.location.hash.replace('#', '');
+        const hash = raw.split('?')[0] || raw;
+        const query = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : '';
+        const organizerPayments = hash.match(/^organizer-payments\/([0-9a-f-]{36})$/i);
+        if (organizerPayments) {
+            rememberOrganizerTarget(ORGANIZER_PAYMENTS_TARGET_KEY, organizerPayments[1]);
+            return;
+        }
+        const scan = hash.match(/^scan\/([0-9a-f-]{36})$/i);
+        if (scan) {
+            rememberOrganizerTarget(SCAN_TARGET_KEY, scan[1]);
+            return;
+        }
+        const ticket = hash.match(/^ticket\/([0-9a-f-]{36})$/i);
+        if (ticket) {
+            rememberTicketTarget({ bookingId: ticket[1] });
+            return;
+        }
+        if (hash === 'ticket') {
+            const desireId = new URLSearchParams(query).get('desire');
+            if (desireId) rememberTicketTarget({ desireId });
+        }
+    }
+
     // Destination de notification à restaurer après une ré-authentification
     // (clic push ou lien #desire/<id>?notification=<type>). Conservée en
     // sessionStorage pour survivre à un rechargement pendant le login.
@@ -250,6 +337,14 @@ export function initializeApp() {
             guardedNavigate('creation');
             return true;
         }
+        if (page === 'ticket') {
+            // Billet émis après paiement (PAR-03/PAR-04) : le contexte de
+            // l'envie permet de retrouver la réservation si le push ne porte
+            // pas d'identifiant de billet.
+            if (desireId) rememberTicketTarget({ desireId });
+            guardedNavigate('ticket');
+            return true;
+        }
         return false;
     }
 
@@ -269,6 +364,12 @@ export function initializeApp() {
         if (resetPasswordPage?.hide) resetPasswordPage.hide();
         if (boostPage?.hide) boostPage.hide();
         if (adminPage?.hide) adminPage.hide();
+        if (ticketPage?.hide) ticketPage.hide();
+        if (receiptPage?.hide) receiptPage.hide();
+        if (walletPage?.hide) walletPage.hide();
+        if (withdrawalPage?.hide) withdrawalPage.hide();
+        if (organizerPaymentsPage?.hide) organizerPaymentsPage.hide();
+        if (scanPage?.hide) scanPage.hide();
 
         // Afficher la page demandée
         switch (pageId) {
@@ -359,6 +460,37 @@ export function initializeApp() {
                 hide(navbar);
                 if (adminPage?.show) adminPage.show();
                 break;
+            case 'ticket':
+                // Billet personnel et QR (PAR-03) : la cible mémorisée porte
+                // l'identifiant de réservation ou d'envie.
+                hide(navbar);
+                if (ticketPage?.show) ticketPage.show();
+                break;
+            case 'receipt':
+                // Reçu stable du paiement (PAR-04), routé par #receipt/<payment_id>.
+                hide(navbar);
+                if (receiptPage?.show) receiptPage.show();
+                break;
+            case 'wallet':
+                // Portefeuille organisateur (ORG-05) : catégories distinctes.
+                hide(navbar);
+                if (walletPage?.show) walletPage.show();
+                break;
+            case 'withdrawal':
+                // Retrait organisateur (REV-05) : devis, réservation, historique.
+                hide(navbar);
+                if (withdrawalPage?.show) withdrawalPage.show();
+                break;
+            case 'organizer-payments':
+                // Encaissements d'une envie (ORG-02), cible #organizer-payments/<uuid>.
+                hide(navbar);
+                if (organizerPaymentsPage?.show) organizerPaymentsPage.show();
+                break;
+            case 'scan':
+                // Contrôle d'entrée (ORG-03/ORG-04), cible #scan/<uuid>.
+                hide(navbar);
+                if (scanPage?.show) scanPage.show();
+                break;
         }
 
         _currentPageId = pageId;
@@ -376,7 +508,7 @@ export function initializeApp() {
         }
 
         if (pushState) {
-            history.pushState({ page: pageId }, '', `#${pageId}`);
+            history.pushState({ page: pageId }, '', hashFor(pageId));
         }
 
         // Si retour home sans animation (première nav), naviguer direct
@@ -407,7 +539,13 @@ export function initializeApp() {
             (desireDetailsPage as any).close();
             return;
         }
-        if (_currentPageId === 'login' || _currentPageId === 'register' || _currentPageId === 'creation' || _currentPageId === 'profile' || _currentPageId === 'notifications' || _currentPageId === 'admin') {
+        // Un retour vers un hash profond restitue la cible avant le montage.
+        restoreTargetFromHash();
+        if (_currentPageId === 'wallet' || _currentPageId === 'withdrawal' || _currentPageId === 'organizer-payments' || _currentPageId === 'scan') {
+            navigateTo('profile', false);
+            return;
+        }
+        if (_currentPageId === 'login' || _currentPageId === 'register' || _currentPageId === 'creation' || _currentPageId === 'profile' || _currentPageId === 'notifications' || _currentPageId === 'admin' || _currentPageId === 'ticket' || _currentPageId === 'receipt') {
             history.replaceState({ page: 'home' }, '', '#home');
             navigateTo('home', false);
             return;
@@ -438,13 +576,49 @@ export function initializeApp() {
     const _desireLinkMatch = initialHash.match(/^desire\/([0-9a-f-]{36})$/i);
     const _desireIdFromLink = _desireLinkMatch ? _desireLinkMatch[1] : null;
 
+    // Reçu stable : #receipt/<payment_id> (cible du lien de téléchargement
+    // renvoyé par l'API — PAR-04).
+    const _receiptLinkMatch = initialHash.match(/^receipt\/([0-9a-f-]{36})$/i);
+    const _receiptIdFromLink = _receiptLinkMatch ? _receiptLinkMatch[1] : null;
+    if (_receiptIdFromLink) {
+        // Mémorisé : la page de reçu le relit après une éventuelle reconnexion.
+        rememberReceiptTarget(_receiptIdFromLink);
+    }
+
+    // Pages organisateur profondes : #organizer-payments/<uuid>, #scan/<uuid>
+    // (ORG-02/ORG-03), #ticket/<uuid> ou #ticket?desire=<uuid> (PAR-03).
+    const _organizerPaymentsMatch = initialHash.match(/^organizer-payments\/([0-9a-f-]{36})$/i);
+    if (_organizerPaymentsMatch) {
+        rememberOrganizerTarget(ORGANIZER_PAYMENTS_TARGET_KEY, _organizerPaymentsMatch[1]);
+    }
+    const _scanLinkMatch = initialHash.match(/^scan\/([0-9a-f-]{36})$/i);
+    if (_scanLinkMatch) {
+        rememberOrganizerTarget(SCAN_TARGET_KEY, _scanLinkMatch[1]);
+    }
+    const _ticketLinkMatch = initialHash.match(/^ticket\/([0-9a-f-]{36})$/i);
+    if (_ticketLinkMatch) {
+        rememberTicketTarget({ bookingId: _ticketLinkMatch[1] });
+    } else if (initialHash === 'ticket') {
+        const desireIdFromLink = new URLSearchParams(initialHashQuery).get('desire');
+        if (desireIdFromLink) rememberTicketTarget({ desireId: desireIdFromLink });
+    }
+    const initialPage = _receiptIdFromLink
+        ? 'receipt'
+        : _organizerPaymentsMatch
+            ? 'organizer-payments'
+            : _scanLinkMatch
+                ? 'scan'
+                : _ticketLinkMatch
+                    ? 'ticket'
+                    : initialHash;
+
     customElements.whenDefined('app-home-hero').then(() => {
         // ── Auth guard ──────────────────────────────────────────
         // Les liens de partage desire/<id> sont publics (pas besoin d'être connecté pour voir)
-        const isPublic = PUBLIC_PAGES.has(initialHash) || !!_desireIdFromLink;
+        const isPublic = PUBLIC_PAGES.has(initialPage) || !!_desireIdFromLink;
         const targetPage = isPublic
-            ? (_desireIdFromLink ? 'home' : initialHash)
-            : (api.isAuthenticated() ? initialHash : 'login');
+            ? (_desireIdFromLink ? 'home' : initialPage)
+            : (api.isAuthenticated() ? initialPage : 'login');
 
         // Édition restaurée depuis l'URL (#creation?edit=<id>) : recharger l'envie
         // avant d'afficher la page de création.
@@ -456,9 +630,13 @@ export function initializeApp() {
         if (_desireIdFromLink) {
             history.replaceState({ page: 'home' }, '', '#home');
         }
+        if (_receiptIdFromLink) {
+            history.replaceState({ page: 'receipt' }, '', `#receipt/${_receiptIdFromLink}`);
+        }
         if (api.isAuthenticated()) {
             sessionManager.start(); // déjà connecté → démarrer le timer
             offerContextualInstall();
+            resumePendingPaymentOnce();
         }
 
         // Ouvrir l'overlay de détails si c'est un lien partagé (et pousser un état pour que "retour" ferme l'overlay)
@@ -517,6 +695,23 @@ export function initializeApp() {
         } else {
             navigateTo('login');
         }
+    }
+
+    /**
+     * Reprend une fois par session le paiement laissé ouvert (PAR-02).
+     * Le retour CinetPay ne prouve rien : seul le serveur tranche.
+     */
+    let _paymentResumeDone = false;
+    function resumePendingPaymentOnce() {
+        if (_paymentResumeDone || !api.isAuthenticated()) return;
+        _paymentResumeDone = true;
+        boostPage?.resumeCheckout?.();
+        resumePendingPayment().then((outcome: any) => {
+            if (outcome?.outcome !== 'succeeded') return;
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: 'Paiement confirmé. Votre billet est disponible.', type: 'success' },
+            }));
+        }).catch(() => {});
     }
 
     async function openPushDestination(payload: unknown) {
@@ -597,6 +792,24 @@ export function initializeApp() {
     window.addEventListener('navigate-notifications', () => guardedNavigate('notifications'));
     window.addEventListener('navigate-creation', () => guardedNavigate('creation'));
     window.addEventListener('navigate-profile', () => guardedNavigate('profile'));
+    // Billet (PAR-03) et reçu (PAR-04) : la cible est mémorisée par l'émetteur
+    // (fiche d'envie, profil) puis relue au montage de la page.
+    window.addEventListener('open-ticket', () => guardedNavigate('ticket'));
+    window.addEventListener('open-receipt', () => guardedNavigate('receipt'));
+    // Parcours organisateur (ORG-02 à ORG-05) : la cible d'envie est mémorisée
+    // par l'émetteur puis relue au montage de la page.
+    window.addEventListener('navigate-organizer-payments', (e) => {
+        const desireId = (e as CustomEvent).detail?.desireId;
+        if (desireId) rememberOrganizerTarget(ORGANIZER_PAYMENTS_TARGET_KEY, desireId);
+        guardedNavigate('organizer-payments');
+    });
+    window.addEventListener('navigate-scan', (e) => {
+        const desireId = (e as CustomEvent).detail?.desireId;
+        if (desireId) rememberOrganizerTarget(SCAN_TARGET_KEY, desireId);
+        guardedNavigate('scan');
+    });
+    window.addEventListener('navigate-wallet', () => guardedNavigate('wallet'));
+    window.addEventListener('navigate-withdrawal', () => guardedNavigate('withdrawal'));
     // Console d'administration (MNO-12) : protégée par le jeton ; l'API refuse
     // en 403 les comptes ordinaires et la page se referme d'elle-même.
     window.addEventListener('navigate-admin', () => guardedNavigate('admin'));
@@ -634,6 +847,7 @@ export function initializeApp() {
             expl.loadDesires?.();
         }
         window.dispatchEvent(new CustomEvent('refresh-notif-badge'));
+        resumePendingPaymentOnce();
 
         // Restaurer la destination d'une notification mémorisée avant la reconnexion
         const pending = readPendingDestination();
@@ -649,6 +863,9 @@ export function initializeApp() {
                     focus: pendingTarget,
                 });
             }, 150);
+        } else if (readReceiptTarget()) {
+            // Reçu visé avant la reconnexion (#receipt/<payment_id>) — PAR-04.
+            setTimeout(() => guardedNavigate('receipt'), 150);
         }
     });
 
@@ -694,7 +911,7 @@ export function initializeApp() {
             (desireDetailsPage as any).close();
             return;
         }
-        if (_currentPageId === 'profile' || _currentPageId === 'notifications') {
+        if (_currentPageId === 'profile' || _currentPageId === 'notifications' || _currentPageId === 'ticket' || _currentPageId === 'receipt') {
             navigateTo('home');
             return;
         }

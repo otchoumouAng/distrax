@@ -114,6 +114,16 @@ export class CreationPage extends HTMLElement {
                 .cr-price-amount-wrap .cr-input { padding-right: 52px; }
                 .cr-currency { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--text-light); font-weight: 600; font-size: 14px; pointer-events: none; }
 
+                /* ── Conditions payantes (ORG-01) ── */
+                .cr-payment-terms { display: none; flex-direction: column; gap: 4px; margin: -6px 0 20px; }
+                .cr-payment-terms.visible { display: flex; }
+                .cr-field-hint { font-size: 12px; color: var(--text-muted); }
+                .cr-payment-note { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--primary) 7%, var(--bg-card)); color: var(--text-main); font-size: 13px; line-height: 1.45; }
+                .cr-payment-note i { font-size: 18px; color: var(--primary); flex-shrink: 0; }
+                .cr-payment-note.warning { background: rgba(245, 158, 11, 0.12); }
+                .cr-payment-note.warning i { color: #f59e0b; }
+                .cr-payment-note[hidden] { display: none; }
+
                 /* ── Footer nav ── */
                 .cr-footer { display: flex; align-items: center; gap: 12px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border-light); background: var(--bg-card); flex-shrink: 0; }
                 .cr-btn-back { display: flex; align-items: center; gap: 6px; padding: 12px 20px; border-radius: 100px; border: 1px solid var(--border-light); background: var(--bg-card); color: var(--text-main); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
@@ -259,6 +269,28 @@ export class CreationPage extends HTMLElement {
                                 <input id="crAmountInput" type="number" class="cr-input" placeholder="Montant" min="0" step="500">
                                 <span class="cr-currency">FCFA</span>
                             </div>
+                            <span class="cr-field-error" id="crAmountError">Indique un tarif supérieur à 0 FCFA.</span>
+                        </div>
+                        <div class="cr-payment-terms" id="crPaymentTerms">
+                            <div class="cr-field">
+                                <label class="cr-field-label"><span class="req">*</span> Fin prévue</label>
+                                <input id="crEndDateInput" type="datetime-local" class="cr-input">
+                                <span class="cr-field-hint">Le contrôle des billets se ferme après cette heure.</span>
+                                <span class="cr-field-error" id="crEndDateError">La fin prévue est requise et doit suivre le début.</span>
+                            </div>
+                            <div class="cr-field">
+                                <label class="cr-field-label"><span class="req">*</span> Fuseau horaire</label>
+                                <input id="crTimezoneInput" type="text" class="cr-input" maxlength="64" placeholder="Ex: Africa/Abidjan">
+                                <span class="cr-field-error" id="crTimezoneError">Indique un fuseau valide (ex : Africa/Abidjan).</span>
+                            </div>
+                            <p class="cr-payment-note">
+                                <i class="material-icons-round">verified_user</i>
+                                <span>Paiement en ligne : le participant règle le tarif. Tu es le bénéficiaire, le net est crédité sur ton portefeuille à la validation de chaque billet.</span>
+                            </p>
+                            <p class="cr-payment-note warning" id="crPaymentLocked" hidden>
+                                <i class="material-icons-round">lock</i>
+                                <span>Dès qu'une réservation payante existe, le tarif, la fin et le fuseau ne peuvent plus être modifiés.</span>
+                            </p>
                         </div>
                         <div class="cr-field">
                             <label class="cr-field-label">Nombre de personnes</label>
@@ -339,6 +371,10 @@ export class CreationPage extends HTMLElement {
         this._priceAmountWrap = q('#crPriceAmountWrap');
         this._priceFree = q('#crPriceFree');
         this._pricePaid = q('#crPricePaid');
+        this._paymentTerms = q('#crPaymentTerms');
+        this._endDateInput = q('#crEndDateInput');
+        this._timezoneInput = q('#crTimezoneInput');
+        this._paymentLocked = q('#crPaymentLocked');
     }
 
     /* ── Event listeners ── */
@@ -391,6 +427,33 @@ export class CreationPage extends HTMLElement {
         this._maxSpotsInput.addEventListener('input', () => {
             this._maxSpotsInput.classList.remove('field-error');
             this.querySelector('#crSpotsError')?.classList.remove('visible');
+        });
+
+        // Conditions payantes (ORG-01)
+        try {
+            const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (detectedTz && this._timezoneInput && !this._timezoneInput.value) {
+                this._timezoneInput.value = detectedTz;
+            }
+        } catch { /* fuseau indétectable : saisie manuelle */ }
+        this._dateInput?.addEventListener('change', () => {
+            if (!this._pricePaid.classList.contains('selected') || !this._dateInput.value) return;
+            if (this._endDateInput?.value) return;
+            const start = new Date(this._dateInput.value);
+            if (Number.isNaN(start.getTime())) return;
+            this._endDateInput.value = toDatetimeLocalValue(new Date(start.getTime() + 2 * 60 * 60 * 1000));
+        });
+        this._endDateInput?.addEventListener('input', () => {
+            this._endDateInput.classList.remove('field-error');
+            this.querySelector('#crEndDateError')?.classList.remove('visible');
+        });
+        this._timezoneInput?.addEventListener('input', () => {
+            this._timezoneInput.classList.remove('field-error');
+            this.querySelector('#crTimezoneError')?.classList.remove('visible');
+        });
+        this._amountInput?.addEventListener('input', () => {
+            this._amountInput.classList.remove('field-error');
+            this.querySelector('#crAmountError')?.classList.remove('visible');
         });
 
         // Categories exclusive
@@ -530,6 +593,35 @@ export class CreationPage extends HTMLElement {
             valid = false;
         }
 
+        // Conditions payantes (ORG-01) : tarif, fin et fuseau cohérents.
+        const isPaid = this._pricePaid.classList.contains('selected');
+        if (isPaid) {
+            const amountErr = this.querySelector('#crAmountError');
+            const amount = Number(this._amountInput.value);
+            clearErr(this._amountInput, amountErr);
+            if (!Number.isFinite(amount) || amount <= 0) {
+                showErr(this._amountInput, amountErr);
+                valid = false;
+            }
+        }
+        if (isPaid && this._onlineTermsEnabled()) {
+            const endErr = this.querySelector('#crEndDateError');
+            clearErr(this._endDateInput, endErr);
+            const startMs = this._dateInput.value ? new Date(this._dateInput.value).getTime() : NaN;
+            const endMs = this._endDateInput.value ? new Date(this._endDateInput.value).getTime() : NaN;
+            if (!Number.isFinite(endMs) || (Number.isFinite(startMs) && endMs <= startMs)) {
+                showErr(this._endDateInput, endErr);
+                valid = false;
+            }
+
+            const tzErr = this.querySelector('#crTimezoneError');
+            clearErr(this._timezoneInput, tzErr);
+            if (!this._isValidTimezone(this._timezoneInput.value.trim())) {
+                showErr(this._timezoneInput, tzErr);
+                valid = false;
+            }
+        }
+
         if (!valid) {
             const firstErr = this._body.querySelector('.cr-step.active .field-error');
             firstErr?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -597,7 +689,27 @@ export class CreationPage extends HTMLElement {
         this._priceFree.classList.toggle('selected', type === 'free');
         this._pricePaid.classList.toggle('selected', type === 'paid');
         this._priceAmountWrap.classList.toggle('visible', type === 'paid');
-        if (type === 'free') this._amountInput.value = '';
+        this._paymentTerms?.classList.toggle('visible', type === 'paid' && this._onlineTermsEnabled());
+        if (type === 'free') {
+            this._amountInput.value = '';
+            this.querySelector('#crAmountError')?.classList.remove('visible');
+            this._amountInput.classList.remove('field-error');
+        }
+    }
+
+    /** Paiement en ligne plateforme : toute création payante, sauf édition d'une envie historique. */
+    _onlineTermsEnabled() {
+        return !this._editMode || this._editPaymentPolicy !== 'legacy_external';
+    }
+
+    _isValidTimezone(value) {
+        if (!value) return false;
+        try {
+            new Intl.DateTimeFormat('fr-FR', { timeZone: value });
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     _setSpotsType(type) {
@@ -764,6 +876,20 @@ export class CreationPage extends HTMLElement {
                 is_unlimited: isUnlimited,
             };
 
+            // Conditions payantes (ORG-01) : le bénéficiaire reste l'auteur.
+            if (priceType === 'paid' && this._onlineTermsEnabled()) {
+                payload.price_amount = parseInt(this._amountInput.value, 10);
+                payload.pay_mode = 'they_pay';
+                payload.payment_policy = 'platform_required';
+                payload.currency = 'XOF';
+                payload.event_end_at = new Date(this._endDateInput.value).toISOString();
+                payload.event_timezone = this._timezoneInput.value.trim();
+            } else if (priceType !== 'paid' && this._editMode && this._editPaymentPolicy === 'platform_required') {
+                payload.price_amount = null;
+                payload.pay_mode = null;
+                payload.payment_policy = 'none';
+            }
+
             if (this._editMode && this._editDesireId) {
                 btn.innerHTML = '<i class="material-icons-round" style="animation:spin 1s linear infinite;">autorenew</i> Mise à jour...';
                 const existing = this._existingImages || [];
@@ -799,6 +925,8 @@ export class CreationPage extends HTMLElement {
                 friendly = 'Échec de l\'upload des images. Vérifie ta connexion.';
             else if (msg.includes('401') || msg.includes('Connectez') || msg.includes('authentif'))
                 friendly = 'Session expirée. Reconnecte-toi.';
+            else if (['FUNDS_HELD', 'CAPACITY_BELOW_OCCUPANCY', 'VALIDATION_ERROR'].includes(err?.code) && msg)
+                friendly = msg;
             else if (msg.length > 55) friendly = 'Une erreur est survenue. Réessaie.';
             window.dispatchEvent(new CustomEvent('show-toast', { detail: { message: friendly, type: 'error' }, bubbles: true, composed: true }));
         }
@@ -816,6 +944,7 @@ export class CreationPage extends HTMLElement {
         this._additionalFiles = [];
         this._editMode = false;
         this._editDesireId = null;
+        this._editPaymentPolicy = null;
         this._existingImages = null;
 
         // Reset form
@@ -824,6 +953,8 @@ export class CreationPage extends HTMLElement {
         this._addressInput.value = '';
         this._descTextarea.value = '';
         this._amountInput.value = '';
+        if (this._endDateInput) this._endDateInput.value = '';
+        if (this._paymentLocked) this._paymentLocked.hidden = true;
         this._setPriceType('free');
         this._setSpotsType(null);
 
@@ -965,6 +1096,7 @@ export class CreationPage extends HTMLElement {
 
         this._editMode = true;
         this._editDesireId = desireId;
+        this._editPaymentPolicy = null;
         this._editToken = Symbol();
 
         // Show loading overlay
@@ -982,6 +1114,7 @@ export class CreationPage extends HTMLElement {
             const { api } = await import('../../api.js');
             const desire = await api.getDesire(desireId);
             overlay.remove();
+            this._editPaymentPolicy = desire.payment_policy || 'legacy_external';
 
             // Fill form
             if (this._titleInput) this._titleInput.value = desire.title || '';
@@ -1018,6 +1151,16 @@ export class CreationPage extends HTMLElement {
             if (desire.price_type === 'paid') {
                 this._setPriceType('paid');
                 if (this._amountInput && desire.price_amount) this._amountInput.value = desire.price_amount;
+            }
+            // Conditions payantes (ORG-01) : fin, fuseau et verrou d'édition.
+            if (desire.event_end_at && this._endDateInput) {
+                this._endDateInput.value = toDatetimeLocalValue(new Date(desire.event_end_at));
+            }
+            if (desire.event_timezone && this._timezoneInput) {
+                this._timezoneInput.value = desire.event_timezone;
+            }
+            if (this._paymentLocked) {
+                this._paymentLocked.hidden = this._editPaymentPolicy !== 'platform_required';
             }
 
             // Capacité : la propriété explicite distingue illimité de « limité à 100 ».
@@ -1075,6 +1218,7 @@ export class CreationPage extends HTMLElement {
         this._editToken = null;
         this._editMode = false;
         this._editDesireId = null;
+        this._editPaymentPolicy = null;
         this._existingImages = null;
         this._currentStep = 0;
 
@@ -1092,6 +1236,8 @@ export class CreationPage extends HTMLElement {
         if (this._addressInput) this._addressInput.value = '';
         if (this._descTextarea) this._descTextarea.value = '';
         if (this._amountInput) this._amountInput.value = '';
+        if (this._endDateInput) this._endDateInput.value = '';
+        if (this._paymentLocked) this._paymentLocked.hidden = true;
         this._setPriceType('free');
         if (this._spotsUnlimited && this._spotsLimited) this._setSpotsType(null);
 

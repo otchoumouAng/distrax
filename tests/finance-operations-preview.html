@@ -1,0 +1,25 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recette locale — opérations financières</title>
+<style>
+:root{--bg-main:#f5f6fa;--bg-card:white;--text-main:#242633;--border-light:#d9dce6}
+body{margin:0;padding:20px;font:15px system-ui;background:var(--bg-main);color:var(--text-main)}
+main{max-width:760px;margin:auto}button{min-height:44px}body.dark{--bg-main:#151620;--bg-card:#242633;--text-main:#f8f8fa;--border-light:#515362}
+</style><main><p>Recette locale · données fictives · aucun appel monétaire</p>
+<button onclick="document.body.classList.toggle('dark')">Changer de thème</button>
+<finance-operations></finance-operations>
+<financial-request booking-id="00000000-0000-4000-8000-000000000001"></financial-request>
+</main><script type="module">
+import {api} from '../js/api.js';
+import '../js/components/ui/FinanceOperations.js';
+import '../js/components/ui/FinancialRequest.js';
+const id='00000000-0000-4000-8000-000000000001';
+window.commands=[];
+api.financeRequest=async(path,body,key)=>{
+    if(body){window.commands.push({path,body,key});return {id};}
+    return {alerts:[{kind:'refund_review',resource_id:id}],limit:200,
+        refunds:[{id,amount:5000,currency:'XOF',status:'unknown',version:2,execution_id:id}],
+        disputes:[{id,reason:'L’activité annoncée n’a pas eu lieu.',held_amount:5000,version:0}],
+        unscanned:[{id,booking_id:id,title:'Sortie à Abidjan'}],decisions:[],payouts:[],ledger:[{currency:'XOF',balance:0}]};
+};
+document.querySelector('finance-operations').load();
+</script></html>

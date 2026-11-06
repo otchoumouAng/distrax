@@ -2,8 +2,12 @@
  * BoostPage — Sélection de la durée, zone et options du boost.
  * - Charge les plans depuis GET /api/v1/boosts/plans
  * - Calcule le prix dynamiquement (plan × zone multiplier)
- * - Active le boost via POST /api/v1/boosts
+ * - Ouvre le paiement des boosts payants et active les boosts gratuits
  */
+const PENDING_BOOST_KEY = 'distrax-pending-boost';
+const CHECKING_PUBLICATION = 'Vérification de la publication…';
+const zonePrice = (base, multiplier) => Math.floor(base * Math.round(multiplier * 100) / 100);
+
 export class BoostPage extends HTMLElement {
     constructor() {
         super();
@@ -12,6 +16,8 @@ export class BoostPage extends HTMLElement {
         this._selectedPlanId = null;
         this._selectedZone   = 'commune';
         this._desireId       = null;
+        this._checkout       = null;
+        this._eligibilityMessage = '';
     }
 
     connectedCallback() {
@@ -136,6 +142,7 @@ export class BoostPage extends HTMLElement {
                     </div>
 
                     <!-- CTA principal -->
+                    <p id="boostCheckoutStatus" role="status" hidden></p>
                     <button class="boost-launch-btn" id="boostLaunchBtn">
                         <i class="material-icons-round">rocket_launch</i>
                         Lancer le boost
@@ -440,7 +447,7 @@ export class BoostPage extends HTMLElement {
 
         this.querySelectorAll('#boostZonesContainer .boost-radio-card').forEach(card => {
             const multiplier = parseFloat(card.dataset.multiplier || '1.0');
-            const extra      = Math.round(basePrice * (multiplier - 1.0));
+            const extra      = zonePrice(basePrice, multiplier) - basePrice;
             const priceEl    = card.querySelector('.boost-zone-price');
             if (!priceEl) return;
 
@@ -520,7 +527,7 @@ export class BoostPage extends HTMLElement {
 
         if (summaryOptionsRows) summaryOptionsRows.innerHTML = optionsHtml;
 
-        const total = Math.round(basePrice * multiplier) + optionsExtra;
+        const total = zonePrice(basePrice, multiplier) + optionsExtra;
 
         const fmt = (n) => n === 0 ? 'Gratuit' : `${n.toLocaleString('fr-FR')} FCFA`;
 
@@ -532,7 +539,7 @@ export class BoostPage extends HTMLElement {
 
         // Zone : afficher la description + le surplus ajouté
         const zoneDesc  = zoneCard?.querySelector('.boost-radio-sub')?.textContent || zoneName;
-        const zoneExtra = Math.round(basePrice * (multiplier - 1.0));
+        const zoneExtra = zonePrice(basePrice, multiplier) - basePrice;
 
         const zoneDescEl  = this.querySelector('#summaryZoneDesc');
         const zoneExtraEl = this.querySelector('#summaryZoneExtra');
@@ -550,6 +557,11 @@ export class BoostPage extends HTMLElement {
 
         const totalEl = this.querySelector('#boostTotalPrice');
         if (totalEl) totalEl.textContent = fmt(total);
+        this._price = total;
+        const launch = this.querySelector('#boostLaunchBtn');
+        if (launch && !this._checkout && !launch.disabled) {
+            launch.textContent = total > 0 ? 'Payer le boost' : 'Lancer le boost';
+        }
     }
 
     setupEventListeners() {
@@ -564,7 +576,10 @@ export class BoostPage extends HTMLElement {
         const launchBtn = this.querySelector('#boostLaunchBtn');
         if (launchBtn) {
             launchBtn.addEventListener('click', async () => {
+                if (launchBtn.disabled || this._eligibilityMessage) return;
+                const desireId = this._desireId;
                 const { api } = await import('../../api.js');
+                if (launchBtn.disabled || this._desireId !== desireId) return;
 
                 if (!api.isAuthenticated()) {
                     launchBtn.style.background = '#ef4444';
@@ -577,7 +592,7 @@ export class BoostPage extends HTMLElement {
                     return;
                 }
 
-                if (!this._desireId || !this._selectedPlanId) {
+                if (!this._desireId || (!this._selectedPlanId && !this._checkout)) {
                     launchBtn.style.background = '#ef4444';
                     launchBtn.innerHTML = '<i class="material-icons-round">error</i> Sélectionnez une envie et un plan';
                     setTimeout(() => {
@@ -602,17 +617,36 @@ export class BoostPage extends HTMLElement {
                 const zone = zoneCard?.querySelector('input[name="zone"]')?.value || this._selectedZone || 'commune';
 
                 launchBtn.disabled = true;
-                launchBtn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite;">autorenew</i> Activation...';
+                launchBtn.innerHTML = '<i class="material-icons-round" style="animation: spin 1s linear infinite;">autorenew</i> Vérification…';
 
                 try {
-                    await api.activateBoost({
-                        desire_id:         this._desireId,
-                        duration_id:       this._selectedPlanId,
-                        zone,
-                        notify_interested: notifyChecked,
-                        priority_position: priorityChecked,
-                        options:           selectedOptions,
-                    });
+                    const checkout = this._checkout
+                        ? await api.getBoostPayment(desireId)
+                        : await api.checkoutBoost({
+                            desire_id: desireId,
+                            duration_id: this._selectedPlanId,
+                            zone,
+                            notify_interested: notifyChecked,
+                            priority_position: priorityChecked,
+                            options: selectedOptions,
+                        });
+                    if (this._desireId !== desireId) return;
+                    if (checkout?.status && checkout.status !== 'activated') {
+                        this._renderCheckout(checkout);
+                        if (checkout.checkout_url) {
+                            try {
+                                sessionStorage.setItem(PENDING_BOOST_KEY, JSON.stringify({
+                                    id: checkout.id, desireId,
+                                }));
+                            } catch { /* L'état reste consultable dans l'application. */ }
+                            window.location.assign(checkout.checkout_url);
+                        }
+                        return;
+                    }
+                    if (!checkout) {
+                        this._renderCheckout(null);
+                        return;
+                    }
 
                     launchBtn.style.background = '#10b981';
                     launchBtn.innerHTML = '<i class="material-icons-round">check_circle</i> Boost activé !';
@@ -623,16 +657,72 @@ export class BoostPage extends HTMLElement {
                     }, 1500);
 
                 } catch (err) {
+                    if (this._desireId !== desireId) return;
+                    if (err.code === 'BOOST_UNAVAILABLE') {
+                        this._eligibilityMessage = err.message;
+                        this._renderCheckout(this._checkout);
+                        return;
+                    }
                     launchBtn.disabled = false;
                     launchBtn.style.background = '#ef4444';
-                    launchBtn.innerHTML = `<i class="material-icons-round">error</i> ${err.message}`;
+                    launchBtn.textContent = err.message || 'Le boost est momentanément indisponible.';
                     setTimeout(() => {
+                        if (this._desireId !== desireId) return;
                         launchBtn.style.background = 'linear-gradient(135deg, var(--primary), var(--primary-light))';
-                        launchBtn.innerHTML = '<i class="material-icons-round">rocket_launch</i> Lancer le boost';
+                        this._renderCheckout(this._checkout);
                     }, 3000);
                 }
             });
         }
+    }
+
+    _renderCheckout(checkout) {
+        const inProgress = checkout && ['pending', 'unknown'].includes(checkout.status);
+        this._checkout = inProgress ? checkout : null;
+        const status = this.querySelector('#boostCheckoutStatus');
+        const button = this.querySelector('#boostLaunchBtn');
+        const amount = checkout ? `${checkout.price_xof.toLocaleString('fr-FR')} FCFA` : '';
+        const messages = {
+            pending: `Paiement de ${amount} en attente de confirmation.`,
+            unknown: `Paiement de ${amount} en cours de vérification.`,
+            failed: 'Le paiement a échoué. Vous pouvez réessayer.',
+            review_required: 'Le paiement est confirmé. L’activation du boost doit être examinée.',
+        };
+        status.textContent = checkout?.status === 'review_required'
+            ? messages.review_required
+            : this._eligibilityMessage || messages[checkout?.status] || '';
+        status.hidden = !status.textContent;
+        button.disabled = Boolean(this._eligibilityMessage)
+            || checkout?.status === 'review_required' || (!inProgress && !this._selectedPlanId);
+        if (this._eligibilityMessage) {
+            button.textContent = this._eligibilityMessage === CHECKING_PUBLICATION
+                ? 'Vérification…' : 'Boost indisponible';
+        } else if (inProgress) {
+            button.textContent = checkout.checkout_url ? `Reprendre le paiement de ${amount}` : 'Vérifier le paiement';
+        } else {
+            button.textContent = this._price > 0 ? 'Payer le boost' : 'Lancer le boost';
+        }
+    }
+
+    async resumeCheckout() {
+        try {
+            const pending = JSON.parse(sessionStorage.getItem(PENDING_BOOST_KEY) || 'null');
+            if (!pending) return;
+            const { api } = await import('../../api.js');
+            const payment = await api.getBoostPayment(pending.desireId);
+            if (!payment || payment.id !== pending.id) return;
+            if (this._desireId === pending.desireId) this._renderCheckout(payment);
+            const messages = {
+                activated: 'Paiement confirmé. Votre boost est actif.',
+                failed: 'Le paiement du boost a échoué.',
+                review_required: 'Votre boost payé doit être examiné avant activation.',
+            };
+            if (messages[payment.status]) sessionStorage.removeItem(PENDING_BOOST_KEY);
+            window.dispatchEvent(new CustomEvent('show-toast', { detail: {
+                message: messages[payment.status] || 'Le paiement du boost est en cours de vérification.',
+                type: payment.status === 'activated' ? 'success' : 'info',
+            } }));
+        } catch { /* La consultation reste disponible depuis l’écran de boost. */ }
     }
 
     /**
@@ -640,13 +730,12 @@ export class BoostPage extends HTMLElement {
      * @param {string} [opts.desireId]    UUID de l'envie à booster
      * @param {string} [opts.desireTitle] Titre affiché dans le résumé
      */
-    /**
-     * @param {Object} opts
-     * @param {string} [opts.desireId]    UUID de l'envie à booster
-     * @param {string} [opts.desireTitle] Titre affiché dans le résumé
-     */
     open({ desireId = null, desireTitle = null } = {}) {
         this._desireId = desireId;
+        this._selectedPlanId = null;
+        this._price = 0;
+        this._eligibilityMessage = desireId ? CHECKING_PUBLICATION : 'Sélectionnez une publication.';
+        this._renderCheckout(null);
 
         const titleEl = this.querySelector('#boostDesireTitle');
         if (titleEl) titleEl.textContent = desireTitle || 'Envie sélectionnée';
@@ -655,12 +744,32 @@ export class BoostPage extends HTMLElement {
         document.body.style.overflow = 'hidden';
 
         // Charger les plans, zones et options à chaque ouverture
-        this.loadPlans();
-        this.loadZones();
-        this.loadOptions();
+        const catalogue = Promise.all([this.loadPlans(), this.loadZones(), this.loadOptions()]);
+        if (desireId) this._loadEligibility(desireId, catalogue);
+    }
+
+    async _loadEligibility(desireId, catalogue) {
+        try {
+            const { api } = await import('../../api.js');
+            const [, desire, payment] = await Promise.all([
+                catalogue,
+                api.getDesire(desireId),
+                api.getBoostPayment(desireId).catch(() => null),
+            ]);
+            if (this._desireId !== desireId) return;
+            this._eligibilityMessage = desire.boost_unavailable_reason || '';
+            this._renderCheckout(payment?.status === 'activated' ? null : payment);
+        } catch (err) {
+            if (this._desireId !== desireId) return;
+            this._eligibilityMessage = err.status === 404
+                ? 'Cette publication est introuvable.'
+                : 'Impossible de vérifier cette publication. Rouvrez cet écran pour réessayer.';
+            this._renderCheckout(null);
+        }
     }
 
     hide() {
+        this._desireId = null;
         const page = this.querySelector('#boostPage');
         if (page) page.style.display = 'none';
         document.body.style.overflow = '';

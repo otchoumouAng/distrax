@@ -48,6 +48,26 @@ function buildHeaders(extra = {}, options = {}) {
     return headers;
 }
 
+/** Version des conditions tarifaires exigée par les devis (lot 2). */
+export const PAYMENT_TERMS_VERSION = 'v1';
+
+/** Clé d'idempotence : réutilisée telle quelle en cas de rejeu explicite. */
+export function newIdempotencyKey() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === 'x' ? r : ((r & 0x3) | 0x8);
+        return v.toString(16);
+    });
+}
+
+/** En-têtes d'une commande financière (JSON + clé d'idempotence). */
+function financialHeaders(idempotencyKey) {
+    return buildHeaders({ 'Idempotency-Key': idempotencyKey || newIdempotencyKey() });
+}
+
 // ── Contexte pays ────────────────────────────────────────────────
 
 /** Jeton signé du contexte pays, transporté via X-Country-Context. */
@@ -137,6 +157,19 @@ function clearCountryContext() {
     purgeCountryCaches();
 }
 
+/**
+ * Erreur HTTP enrichie du contrat stable de l'API
+ * (`detail` / `code` / `request_id` / `retryable`).
+ */
+function apiError(message, { code = null, status = 0, retryable = false, requestId = null } = {}) {
+    const error = new Error(message);
+    error.code = code;
+    error.status = status;
+    error.retryable = retryable;
+    if (requestId) error.requestId = requestId;
+    return error;
+}
+
 async function handleResponse(res) {
     if (res.ok) {
         if (res.status === 204) return null;
@@ -149,6 +182,9 @@ async function handleResponse(res) {
         }
     }
     let detail = `Erreur ${res.status}`;
+    let code = null;
+    let retryable = false;
+    let requestId = null;
     try {
         const err = await res.json();
         if (Array.isArray(err.detail)) {
@@ -157,8 +193,11 @@ async function handleResponse(res) {
         } else if (err.detail) {
             detail = err.detail;
         }
+        if (typeof err.code === 'string') code = err.code;
+        retryable = err.retryable === true;
+        if (typeof err.request_id === 'string') requestId = err.request_id;
     } catch (_) { }
-    throw new Error(detail);
+    throw apiError(detail, { code, status: res.status, retryable, requestId });
 }
 
 // ── Auth ─────────────────────────────────────────────────────────
@@ -589,6 +628,287 @@ export const api = {
         return handleResponse(res);
     },
 
+    // ── Paiement participant (PAR-01 à PAR-05) ──────────────────
+
+    /**
+     * POST /desires/:id/payment-quotes — Devis (prix total, échéance d'annulation)
+     * @param {string} desireId
+     * @param {{termsVersion?: string, idempotencyKey?: string}} [options]
+     */
+    async createPaymentQuote(desireId, { termsVersion = PAYMENT_TERMS_VERSION, idempotencyKey } = {}) {
+        const res = await fetch(`${BASE_URL}/desires/${desireId}/payment-quotes`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+            body: JSON.stringify({ terms_version: termsVersion }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /desires/:id/bookings — Réserver la place à partir d'un devis
+     * @param {string} desireId
+     * @param {{quoteId: string, termsVersion?: string, idempotencyKey?: string}} options
+     */
+    async createBooking(desireId, { quoteId, termsVersion = PAYMENT_TERMS_VERSION, idempotencyKey } = {}) {
+        const res = await fetch(`${BASE_URL}/desires/${desireId}/bookings`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+            body: JSON.stringify({ quote_id: quoteId, terms_version: termsVersion }),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /bookings/:id — État de la commande (reprise après reconnexion)
+     */
+    async getBooking(id) {
+        const res = await fetch(`${BASE_URL}/bookings/${id}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /bookings/:id/payment-attempts — Ouvrir une tentative de paiement
+     * @param {string} bookingId
+     * @param {{idempotencyKey?: string}} [options]
+     */
+    async createPaymentAttempt(bookingId, { idempotencyKey } = {}) {
+        const res = await fetch(`${BASE_URL}/bookings/${bookingId}/payment-attempts`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /payments/:id — État de paiement (source de vérité, jamais le retour)
+     */
+    async getPayment(id) {
+        const res = await fetch(`${BASE_URL}/payments/${id}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /bookings/:id/ticket — Billet personnel et jeton QR
+     */
+    async getTicket(bookingId) {
+        const res = await fetch(`${BASE_URL}/bookings/${bookingId}/ticket`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /payments/:id/receipt — Reçu stable du paiement
+     */
+    async getReceipt(paymentId) {
+        const res = await fetch(`${BASE_URL}/payments/${paymentId}/receipt`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /bookings/:id/cancel — Annuler et ouvrir le remboursement
+     * @param {string} bookingId
+     * @param {{idempotencyKey?: string}} [options]
+     */
+    async cancelBooking(bookingId, { idempotencyKey } = {}) {
+        const res = await fetch(`${BASE_URL}/bookings/${bookingId}/cancel`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /refunds/:id — Suivi du remboursement
+     */
+    async getRefund(id) {
+        const res = await fetch(`${BASE_URL}/refunds/${id}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    // ── Parcours organisateur (ORG-02 à ORG-05) ─────────────────
+
+    /**
+     * GET /organizer/desires/:id/payments — Encaissements d'une envie
+     * @param {string} desireId
+     * @param {{cursor?: string, limit?: number}} [options]
+     */
+    async getOrganizerPayments(desireId, { cursor, limit } = {}) {
+        const params = new URLSearchParams();
+        if (cursor) params.set('cursor', cursor);
+        if (limit) params.set('limit', String(limit));
+        const query = params.toString();
+        const res = await fetch(
+            `${BASE_URL}/organizer/desires/${desireId}/payments${query ? `?${query}` : ''}`,
+            { headers: buildHeaders(), cache: 'no-store' },
+        );
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /organizer/desires/:id/checkins — Valider une entrée (QR ou code de secours)
+     * @param {string} desireId
+     * @param {{qrToken?: string, backupCode?: string, idempotencyKey?: string}} options
+     */
+    async scanCheckin(desireId, { qrToken, backupCode, idempotencyKey } = {}) {
+        const body = {};
+        if (qrToken) body.qr_token = qrToken;
+        if (backupCode) body.backup_code = backupCode;
+        const res = await fetch(`${BASE_URL}/organizer/desires/${desireId}/checkins`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+            body: JSON.stringify(body),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /organizer/wallet — Solde global ou détail d'une envie
+     * @param {{desireId?: string, currency?: string}} [options]
+     */
+    async getOrganizerWallet({ desireId, currency = 'XOF' } = {}) {
+        const params = new URLSearchParams({ currency });
+        if (desireId) params.set('desire_id', desireId);
+        const res = await fetch(`${BASE_URL}/organizer/wallet?${params.toString()}`, {
+            headers: buildHeaders(),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /bookings/:id/backup-code — Code de secours temporaire du participant
+     * @param {string} bookingId
+     * @param {{idempotencyKey?: string}} [options]
+     */
+    async requestBackupCode(bookingId, { idempotencyKey } = {}) {
+        const res = await fetch(`${BASE_URL}/bookings/${bookingId}/backup-code`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+            body: JSON.stringify({}),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
+    // ── Retraits organisateur (REV-01 à REV-05) ─────────────────
+
+    /**
+     * GET /organizer/payout-destinations — Destinations masquées du titulaire
+     * @param {{cursor?: string, limit?: number}} [options]
+     */
+    async getPayoutDestinations({ cursor, limit } = {}) {
+        const params = new URLSearchParams();
+        if (cursor) params.set('cursor', cursor);
+        if (limit) params.set('limit', String(limit));
+        const query = params.toString();
+        const res = await fetch(
+            `${BASE_URL}/organizer/payout-destinations${query ? `?${query}` : ''}`,
+            { headers: buildHeaders(), cache: 'no-store' },
+        );
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /organizer/payout-destinations/:id — Destination masquée
+     */
+    async getPayoutDestination(id) {
+        const res = await fetch(`${BASE_URL}/organizer/payout-destinations/${id}`, {
+            headers: buildHeaders(),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /organizer/payout-destinations — Enregistrer une destination
+     * (elle reste en attente de vérification administrative)
+     * @param {{country: string, operator: string, accountNumber: string, accountHolder: string, idempotencyKey?: string}} payload
+     */
+    async createPayoutDestination({ country, operator, accountNumber, accountHolder, idempotencyKey } = {}) {
+        const res = await fetch(`${BASE_URL}/organizer/payout-destinations`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+            body: JSON.stringify({
+                country,
+                operator,
+                account_number: accountNumber,
+                account_holder: accountHolder,
+            }),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /organizer/payout-quotes — Devis de retrait (ne réserve rien)
+     * @param {{destinationId: string, selectedBalance: number, desireId?: string, idempotencyKey?: string}} payload
+     */
+    async createPayoutQuote({ destinationId, selectedBalance, desireId, idempotencyKey } = {}) {
+        const body = {
+            destination_id: destinationId,
+            selected_balance: selectedBalance,
+        };
+        if (desireId) body.desire_id = desireId;
+        const res = await fetch(`${BASE_URL}/organizer/payout-quotes`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+            body: JSON.stringify(body),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * POST /organizer/payouts — Demander le retrait et réserver les fonds
+     * @param {{quoteId: string, idempotencyKey?: string}} payload
+     */
+    async requestPayout({ quoteId, idempotencyKey } = {}) {
+        const res = await fetch(`${BASE_URL}/organizer/payouts`, {
+            method: 'POST',
+            headers: financialHeaders(idempotencyKey),
+            body: JSON.stringify({ quote_id: quoteId }),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /organizer/payouts — Historique des retraits (du plus récent au plus ancien)
+     * @param {{cursor?: string, limit?: number}} [options]
+     */
+    async getPayouts({ cursor, limit } = {}) {
+        const params = new URLSearchParams();
+        if (cursor) params.set('cursor', cursor);
+        if (limit) params.set('limit', String(limit));
+        const query = params.toString();
+        const res = await fetch(
+            `${BASE_URL}/organizer/payouts${query ? `?${query}` : ''}`,
+            { headers: buildHeaders(), cache: 'no-store' },
+        );
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /organizer/payouts/:id — État d'un retrait (source de vérité)
+     */
+    async getPayout(id) {
+        const res = await fetch(`${BASE_URL}/organizer/payouts/${id}`, {
+            headers: buildHeaders(),
+            cache: 'no-store',
+        });
+        return handleResponse(res);
+    },
+
     // ── Suggestions & Filtres ───────────────────────────────────
 
     /**
@@ -701,6 +1021,23 @@ export const api = {
             headers: buildHeaders(),
             body: JSON.stringify(data),
         });
+        return handleResponse(res);
+    },
+
+    async checkoutBoost(data) {
+        const res = await fetch(`${BASE_URL}/boosts/checkout`, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify(data),
+        });
+        return handleResponse(res);
+    },
+
+    async getBoostPayment(desireId) {
+        const res = await fetch(`${BASE_URL}/boosts/payments/${encodeURIComponent(desireId)}`, {
+            headers: buildHeaders(),
+        });
+        if (res.status === 404) return null;
         return handleResponse(res);
     },
 
@@ -1110,6 +1447,74 @@ export const api = {
     async unblockAdminUser(userId) {
         const res = await fetch(`${BASE_URL}/admin/users/${encodeURIComponent(userId)}/unblock`, {
             method: 'POST',
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    // ── Dossiers de paiement et journal (EXP-01) ─────────────────
+
+    /**
+     * GET /admin/payments — Recherche de dossiers de paiement [admin]
+     * Les filtres se combinent ; un identifiant inconnu rend une page vide.
+     * La réponse ne porte aucune donnée prestataire (URL, numéro complet).
+     * @param {{booking_id?: string, user_id?: string, desire_id?: string, status?: string,
+     *          payment_status?: string, cursor?: string, limit?: number}} filters
+     * @returns {Promise<{items: Array<Object>, next_cursor: string|null}>}
+     */
+    async financeRequest(path, body = null, key = null) {
+        const headers = buildHeaders();
+        if (body !== null) {
+            headers['Content-Type'] = 'application/json';
+            headers['Idempotency-Key'] = key || crypto.randomUUID();
+        }
+        return handleResponse(await fetch(`${BASE_URL}${path}`, {
+            method: body === null ? 'GET' : 'POST', headers,
+            ...(body === null ? {} : { body: JSON.stringify(body) }),
+        }));
+    },
+
+    async getAdminPayments(filters = {}) {
+        const params = new URLSearchParams();
+        ['booking_id', 'user_id', 'desire_id', 'status', 'payment_status', 'cursor']
+            .forEach((key) => {
+                if (filters[key]) params.set(key, filters[key]);
+            });
+        if (filters.limit) params.set('limit', String(filters.limit));
+        const res = await fetch(`${BASE_URL}/admin/payments?${params}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /admin/payments/:bookingId — Détail d'un dossier [finance]
+     * Réservation, tentatives, billets, remboursements, litiges et journal
+     * rattaché. Lecture seule.
+     * @param {string} bookingId
+     * @returns {Promise<Object>}
+     */
+    async getAdminPaymentDetail(bookingId) {
+        const res = await fetch(`${BASE_URL}/admin/payments/${encodeURIComponent(bookingId)}`, {
+            headers: buildHeaders(),
+        });
+        return handleResponse(res);
+    },
+
+    /**
+     * GET /admin/audit — Journal des décisions financières [admin]
+     * @param {{action?: string, target_type?: string, target_id?: string, actor_id?: string,
+     *          correlation_id?: string, cursor?: string, limit?: number}} filters
+     * @returns {Promise<{items: Array<Object>, next_cursor: string|null}>}
+     */
+    async getAdminAudit(filters = {}) {
+        const params = new URLSearchParams();
+        ['action', 'target_type', 'target_id', 'actor_id', 'correlation_id', 'cursor']
+            .forEach((key) => {
+                if (filters[key]) params.set(key, filters[key]);
+            });
+        if (filters.limit) params.set('limit', String(filters.limit));
+        const res = await fetch(`${BASE_URL}/admin/audit?${params}`, {
             headers: buildHeaders(),
         });
         return handleResponse(res);

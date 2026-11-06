@@ -31,7 +31,27 @@ export function getDesireStatusBadge(status) {
 
 export class DesireCard extends HTMLElement {
     static get observedAttributes() {
-        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card', 'desire-status', 'is-past', 'needs-maintenance', 'like-count', 'liked'];
+        return ['theme', 'title', 'author', 'time-ago', 'avatar', 'date', 'price', 'spots', 'icon', 'btn-text', 'commune', 'image', 'images', 'show-boost', 'mode', 'desire-id', 'description', 'has-active-boost', 'is-boosted', 'view-count', 'navigate-on-card', 'desire-status', 'is-past', 'needs-maintenance', 'like-count', 'liked', 'show-management', 'interested-avatars'];
+    }
+
+    _renderInterestedAvatars() {
+        let urls;
+        try {
+            urls = JSON.parse(this.getAttribute('interested-avatars') || '[]');
+        } catch {
+            return '';
+        }
+        if (!Array.isArray(urls)) return '';
+        const photos = urls.map(resolveImageUrl).filter(Boolean).slice(0, 3);
+        if (!photos.length) return '';
+        return `<div class="avatars-stack" role="img" aria-label="Personnes intéressées" title="Personnes intéressées">
+            ${photos.map(url => {
+                const thumb = getImageVariantUrl(url, 'thumb');
+                return `<img src="${escapeHtml(thumb)}" alt="" loading="lazy" decoding="async"
+                    data-original="${thumb === url ? '' : escapeHtml(url)}"
+                    onerror="if(this.dataset.original){this.src=this.dataset.original;delete this.dataset.original;}else{this.hidden=true;}">`;
+            }).join('')}
+        </div>`;
     }
 
     connectedCallback() {
@@ -75,11 +95,6 @@ export class DesireCard extends HTMLElement {
         // Convert attributes into HTML elements (user content already escaped)
         const spotsHtml = spots ? `<span class="spots-left">${spots}</span>` : '';
         const avatarFallback = escapeHtml(DEFAULT_AVATAR_DATA_URI);
-        const avatarsStackHtml = `
-            <div class="avatars-stack">
-                <img src="${escapeHtml(avatar || DEFAULT_AVATAR_PATH)}" alt="${author}" class="user-avatar" data-fallback-avatar="${avatarFallback}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
-            </div>
-        `;
 
         let priceIcon = 'payments';
         let dateIcon = 'calendar_today';
@@ -95,6 +110,8 @@ export class DesireCard extends HTMLElement {
         const viewCountHtml = (viewCount != null && viewCount !== '') ? `<span class="meta-tag"><i class="material-icons-round">visibility</i> ${escapeHtml(String(Number(viewCount).toLocaleString('fr-FR')))} vues</span>` : '';
 
         const mode = this.getAttribute('mode') || 'default';
+        const showManagement = mode === 'profile' && this.hasAttribute('show-management');
+        const avatarsStackHtml = mode === 'profile' ? this._renderInterestedAvatars() : '';
         const navigateOnCard = this.hasAttribute('navigate-on-card');
         const hideViewBtn = navigateOnCard && (mode === 'default' || mode === 'owner');
         const isPast = this.hasAttribute('is-past');
@@ -149,6 +166,10 @@ export class DesireCard extends HTMLElement {
                 }
             }
             cardActionsHtml = `
+                ${showManagement ? `<button type="button" class="card-management-trigger ca-btn ca-btn--icon"
+                    aria-label="Gérer la publication" aria-haspopup="dialog" title="Gérer la publication">
+                    <i class="material-icons-round" aria-hidden="true">settings</i>
+                </button>` : ''}
                 <button class="view-btn ca-btn ca-btn--icon" title="Voir"><i class="material-icons-round">visibility</i></button>
                 <button class="edit-btn ca-btn ca-btn--edit" title="Éditer"><i class="material-icons-round">edit</i></button>
                 ${boostBtnHtml}
@@ -173,6 +194,16 @@ export class DesireCard extends HTMLElement {
             cardActionsHtml = `
                 <button class="view-btn ca-btn ca-btn--accepted" style="background:var(--success-bg);color:var(--success);border-color:transparent;">
                     <i class="material-icons-round">verified</i> Déjà rejoint
+                </button>
+            `;
+        } else if (mode === 'refund_due' || mode === 'cancelled') {
+            // Participation payante annulée (PAR-05) : le billet est invalidé
+            // et la place libérée ; le reçu et le suivi du remboursement
+            // restent accessibles depuis le profil.
+            cardActionsHtml = `
+                <button class="ca-btn ca-btn--past" type="button" disabled>
+                    <i class="material-icons-round">${mode === 'refund_due' ? 'hourglass_top' : 'event_busy'}</i>
+                    ${mode === 'refund_due' ? 'Remboursement en cours' : 'Participation annulée'}
                 </button>
             `;
         } else if (mode === 'full') {
@@ -205,15 +236,16 @@ export class DesireCard extends HTMLElement {
 
         const themeSafe = ['explore', 'sport', 'chill', 'learn', 'rencontres'].includes(theme) ? theme : 'explore';
         const cardClickableClass = navigateOnCard ? ' desire-card--clickable' : '';
+        const profileClass = mode === 'profile' ? ' desire-card--profile' : '';
         const actionsStyle = cardActionsHtml ? 'display: flex; gap: 8px;' : 'display: none;';
         this.innerHTML = `
-            <article class="desire-card card-${themeSafe}${cardClickableClass}">
+            <article class="desire-card card-${themeSafe}${cardClickableClass}${profileClass}">
                 ${imageHtml}
                 ${sponsoredBadgeHtml}
                 ${statusBadgeHtml}
                 <div class="card-header">
                     <div class="user-info">
-                        <img src="${avatar || DEFAULT_AVATAR_PATH}" alt="${author}" class="user-avatar" data-fallback-avatar="${avatarFallback}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
+                        <img src="${escapeHtml(avatar)}" alt="" class="user-avatar" data-fallback-avatar="${avatarFallback}" onerror="this.onerror=null;this.src=this.getAttribute('data-fallback-avatar')">
                         <div class="user-details">
                             <h3>${author}</h3><span>${timeAgo}</span>
                         </div>
@@ -240,8 +272,35 @@ export class DesireCard extends HTMLElement {
                         ${cardActionsHtml}
                     </div>
                 </div>
+                ${showManagement ? `<dialog class="card-management-dialog" aria-label="Gérer la publication">
+                    <div class="card-management-header">
+                        <h3>Gérer la publication</h3>
+                        <form method="dialog">
+                            <button type="submit" class="ca-btn ca-btn--icon" aria-label="Fermer">
+                                <i class="material-icons-round" aria-hidden="true">close</i>
+                            </button>
+                        </form>
+                    </div>
+                    <button type="button" class="card-management-option" data-org-action="payments">
+                        <i class="material-icons-round" aria-hidden="true">payments</i> Paiements
+                    </button>
+                    <button type="button" class="card-management-option" data-org-action="scan">
+                        <i class="material-icons-round" aria-hidden="true">qr_code_scanner</i> Scanner un billet
+                    </button>
+                </dialog>` : ''}
             </article>
         `;
+
+        const managementDialog = this.querySelector('.card-management-dialog');
+        if (managementDialog) {
+            this.querySelector('.card-management-trigger').addEventListener('click', event => {
+                event.stopPropagation();
+                managementDialog.showModal();
+            });
+            managementDialog.addEventListener('click', event => {
+                if (event.target === managementDialog) managementDialog.close();
+            });
+        }
 
         const joinBtn = this.querySelector('.join-btn');
         if (joinBtn) {

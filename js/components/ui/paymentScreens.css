@@ -1,0 +1,61 @@
+/* Alignement sur design/payment-flows-v2, sans modifier les autres écrans. */
+.flow-header { display:grid;grid-template-columns:44px 1fr 44px;align-items:center;padding:16px 20px;gap:8px }
+.flow-header h1 { text-align:center;font-size:17px;margin:0 }
+.flow-body { padding:20px;display:flex;flex-direction:column;gap:16px;color:var(--text-main) }
+.flow-card { background:var(--bg-card);border:1px solid var(--border-light);border-radius:16px;padding:16px;min-width:0 }
+.flow-card h2,.flow-card h3 { margin:0 0 12px;font-size:15px }
+.flow-row { display:flex;align-items:center;justify-content:space-between;gap:12px }
+.flow-muted { font-size:12px;line-height:1.6;color:var(--text-muted);margin:0 }
+.flow-title { font-size:17px;line-height:1.4;margin:0 0 8px;overflow-wrap:anywhere }
+.flow-btn { display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:46px;box-sizing:border-box;border:0;border-radius:100px;background:var(--primary);color:#fff;font:600 13px var(--font-main,'Plus Jakarta Sans',sans-serif);padding:12px 16px;cursor:pointer }
+.flow-btn:disabled { opacity:.5;cursor:default }
+.flow-btn.secondary { background:color-mix(in srgb,var(--primary) 10%,transparent);color:var(--primary) }
+.flow-link { border:0;background:none;color:var(--primary);font-family:inherit;font-weight:600;font-size:13px;padding:10px 0;cursor:pointer }
+.flow-pill { font-size:11px;font-weight:600;padding:4px 9px;border-radius:100px;background:color-mix(in srgb,#10b981 12%,transparent);color:#047857 }
+.flow-good { color:#047857 }
+.flow-line { height:1px;background:var(--border-light);margin:12px 0 }
+.flow-notice { font-size:12px;line-height:1.6;border-radius:12px;padding:12px;background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--text-main) }
+.flow-money { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px }
+.flow-money strong { display:block;font-size:18px;margin-top:5px;overflow-wrap:anywhere }
+.flow-center { text-align:center }
+.flow-footer { position:sticky;bottom:0;background:var(--glass-bg,var(--bg-main));backdrop-filter:blur(12px);border-top:1px solid var(--border-light);padding:16px 20px 24px;margin-top:auto;z-index:2 }
+.flow-details { font-size:12px;line-height:1.6;color:var(--text-muted) }
+.flow-details summary { cursor:pointer;padding:10px 0 }
+.flow-person { padding:12px 0;border-bottom:1px solid var(--border-light) }
+.flow-person:last-child { border-bottom:0 }
+.flow-person strong { font-size:13px;overflow-wrap:anywhere }
+.flow-timeline { display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light);font-size:13px }
+.flow-timeline i { color:#059669;font-size:20px }
+[data-theme="dark"] .flow-good,[data-theme="dark"] .flow-pill { color:#34d399 }
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .flow-good,:root:not([data-theme="light"]) .flow-pill{color:#34d399}}
+.ticket-page .ticket-card { border-radius:16px;padding:16px;box-shadow:none;display:block;text-align:left }
+.ticket-page .ticket-qr { width:186px;max-width:100%;border:0;border-radius:10px;margin:20px auto }
+.ticket-page .ticket-hint { text-align:center;max-width:none;line-height:1.6 }
+.ticket-page .ticket-title { margin:16px 0 8px;font-size:17px }
+.ticket-page .ticket-header h1 { text-align:center }
+.ticket-page financial-request summary { color:var(--primary);font-size:13px;cursor:pointer }
+.flow-event-button { text-align:left;width:100%;font:inherit;color:var(--text-main);cursor:pointer }
+.flow-search { display:flex;gap:8px;margin-bottom:16px }
+.flow-search input { min-width:0;flex:1 }
+.ticket-page .ticket-header { display:grid;grid-template-columns:44px 1fr 44px;padding:16px 20px;gap:8px }
+.ticket-page .ticket-body { padding:20px;gap:16px }
+.flow-counts { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px;text-align:center }
+.flow-counts .flow-card { padding:12px 4px }
+.payment-confirmation { box-sizing:border-box;width:min(100%,480px);max-width:100%;height:100svh;max-height:100svh;margin:0 auto;border:0;padding:0;background:var(--bg-main);color:var(--text-main);font:inherit }
+.payment-confirmation[open] { display:flex;flex-direction:column }
+.payment-confirmation::backdrop { background:rgba(0,0,0,.5) }
+.withdrawal-page .wd-body { padding:20px }
+.withdrawal-page .wd-header { display:grid;grid-template-columns:44px 1fr 44px;padding:16px 20px }
+.withdrawal-page .wd-header h1 { text-align:center }
+.withdrawal-page .wd-hero { background:var(--bg-card);color:var(--text-main);border:1px solid var(--border-light);border-radius:16px;padding:16px;box-shadow:none }
+.withdrawal-page .wd-hero strong { color:#059669;font-size:28px }
+.withdrawal-page .wd-card { border-radius:16px;padding:16px }
+[data-theme="dark"] .withdrawal-page .wd-hero strong,[data-theme="dark"] .flow-timeline i { color:#34d399 }
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .withdrawal-page .wd-hero strong,:root:not([data-theme="light"]) .flow-timeline i{color:#34d399}}
+.flow-withdraw-form { display:flex;flex-direction:column;gap:16px }
+.flow-withdraw-form .wd-field { display:flex;flex-direction:column;gap:10px }
+.withdrawal-page .wd-primary { width:100%;min-height:46px }
+.withdrawal-page .wd-card h2 { text-transform:none;letter-spacing:normal }
+.flow-btn:focus-visible,.flow-link:focus-visible,.flow-event-button:focus-visible { outline:2px solid var(--primary);outline-offset:3px }
+#adminPaymentDetail { scroll-margin-top:90px }
+.flow-counts strong { display:block;font-size:22px }

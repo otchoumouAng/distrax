@@ -159,6 +159,9 @@ const NOTIFICATION_ACTIONS = {
     join_request: { label: 'Voir et répondre', target: 'participant-requests' },
     join_accepted: { label: 'Confirmer ma présence', target: 'confirm-presence' },
     join_rejected: { label: "Voir d'autres envies", target: 'page:catalogue' },
+    // Billet émis après un paiement confirmé (PAR-04) : le push ouvre
+    // directement le billet personnel et son QR.
+    ticket_issued: { label: 'Voir mon billet', target: 'page:ticket' },
     presence_confirm: { label: 'Je confirme', target: 'confirm-presence' },
     organizer_keep: { label: "Maintenir l'activité", target: 'maintenance' },
     reminder_day: { label: 'Voir les détails', target: 'practical-info' },

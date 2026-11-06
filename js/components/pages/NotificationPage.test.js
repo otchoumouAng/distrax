@@ -43,6 +43,19 @@ describe('historique des notifications', () => {
         expect(getNotificationMeta('reminder_soon').icon).toBe('directions_run');
     });
 
+    it('présente le billet émis et ouvre le billet personnel (PAR-04)', () => {
+        expect(getNotificationMeta('ticket_issued')).toEqual({
+            icon: 'confirmation_number',
+            color: '#10b981',
+            label: 'Billet émis',
+        });
+
+        expect(getNotificationNavigation({
+            type: 'ticket_issued',
+            related_desire_id: 'desire-42',
+        })).toEqual({ id: 'desire-42', focus: 'page:ticket' });
+    });
+
     it('conserve le titre, le corps, la date et l’état de lecture', () => {
         const view = getNotificationViewModel({
             type: 'join_request',

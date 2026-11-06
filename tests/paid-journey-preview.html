@@ -1,0 +1,105 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Distrax — recette locale des participations</title>
+<link rel="stylesheet" href="/css/variables.css">
+<link rel="stylesheet" href="/css/base.css"><link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/tests/fonts/jakarta.css"><link rel="stylesheet" href="/tests/fonts/icons.css">
+<style>
+body{margin:0;font:15px 'Plus Jakarta Sans',sans-serif;background:var(--bg-main);color:var(--text-main)}
+nav{padding:16px;display:flex;gap:8px;flex-wrap:wrap}nav button,nav select{min-height:44px}
+#stage{width:390px;max-width:100%;margin:auto;border:1px solid var(--border-light);box-sizing:border-box}
+#stage .page-section{position:relative;inset:auto;width:100%}#stage .admin-page{height:100svh;overflow-y:auto}
+dialog.payment-confirmation{width:min(var(--preview-width,390px),100%)}
+/* Export visuel : mêmes composants, contenu déroulé en entier, sans barre de recette. */
+html.capture-mode body>p,html.capture-mode body>nav,html.capture-mode #navigation{display:none}
+html.capture-mode #stage{border:0}
+html.capture-mode,html.capture-mode body{width:390px;margin:0;min-width:390px}
+html.capture-mode #stage,html.capture-mode .payment-confirmation{margin-left:0;margin-right:0}
+html.capture-mode #stage .page-section{height:auto!important;min-height:844px;overflow:visible!important}
+html.capture-mode .payment-confirmation{position:absolute;height:auto;min-height:844px;max-height:none;overflow:visible}
+html.capture-mode:has(.payment-confirmation) body{min-height:844px}
+html.capture-mode .profile-sticky-header,html.capture-mode .flow-header{position:relative}
+</style></head><body>
+<p>Recette locale · données fictives · API remplacée · aucun mouvement d’argent</p>
+<nav aria-label="Scénarios de recette"><button data-view="checkout">Confirmer ma place</button><button data-view="ticket">Billet</button><button data-view="receipt">Reçu</button><button data-view="organizer-payments">Paiements</button><button data-view="scan">Scanner</button><button data-view="wallet">Solde</button><button data-view="withdrawal">Retrait</button><button data-view="admin">Administration</button>
+<button id="theme">Changer de thème</button><label>Largeur du composant<select id="width"><option>320</option><option>375</option><option selected>390</option><option>768</option></select></label>
+<label>Réponse simulée<select id="scenario"><option value="ok">Succès</option><option value="session">Session expirée</option><option value="network">Réseau interrompu</option><option value="duplicate">Billet déjà scanné</option></select></label></nav>
+<main id="stage"></main><output id="navigation"></output>
+<script type="module">
+import {api} from '../js/api.js';
+import '../js/components/pages/TicketPage.js';
+import '../js/components/pages/ReceiptPage.js';
+import '../js/components/pages/ScannerPage.js';
+import '../js/components/pages/WalletPage.js';
+import '../js/components/pages/OrganizerPaymentsPage.js';
+import '../js/components/pages/WithdrawalPage.js';
+import '../js/components/pages/AdminPage.js';
+import {confirmPaymentQuote} from '../js/components/ui/PaymentConfirmation.js';
+const id='00000000-0000-4000-8000-000000000001';
+const captureParams=new URLSearchParams(location.search);
+if(captureParams.has('capture')) {
+ document.documentElement.classList.add('capture-mode');
+ document.documentElement.dataset.theme=captureParams.get('theme')==='dark'?'dark':'light';
+}
+let current=captureParams.get('view') || 'ticket';
+const desire={id,title:'Atelier de poterie',location_name:'Cocody, Abidjan',event_date:'2026-12-12T12:00:00Z',payment_policy:'platform_required',price_type:'paid',pay_mode:'they_pay',price_amount:5000,currency:'XOF'};
+let cancelled=false;
+const booking=()=>({id,desire_id:id,total_amount:5000,currency:'XOF',payment_id:id,cancellation_deadline:'2026-12-11T12:00:00Z',status:cancelled?'cancelled':'confirmed',allowed_actions:cancelled?[]:['cancel','view_receipt'],refund_id:cancelled?id:null});
+function response(value){
+    const mode=document.querySelector('#scenario').value;
+    if(mode==='session') throw Object.assign(new Error('Votre session a expiré. Reconnectez-vous.'),{status:401});
+    if(mode==='network') throw new Error('Connexion interrompue. Vérifiez à nouveau.');
+    return value;
+}
+api.getDesire=async()=>response(desire);
+api.getBooking=async()=>response(booking());
+api.cancelBooking=async()=>{response(null);cancelled=true;return {id,status:'requested'};};
+api.getRefund=async()=>response({id,status:'requested'});
+api.getTicket=async()=>response({id,booking_id:id,desire_id:id,status:cancelled?'void':'active',qr_token:cancelled?null:'fixture-only-not-a-valid-ticket',event_start:'2026-12-12T12:00:00Z',event_end:'2026-12-12T14:00:00Z',timezone:'Africa/Abidjan'});
+api.requestBackupCode=async()=>response({code:'12345678',expires_at:new Date(Date.now()+600000).toISOString()});
+api.getReceipt=async()=>response({id,payment_id:id,number:'DX-RECETTE-001',issued_at:'2026-10-24T10:00:00Z',amount:5000,currency:'XOF'});
+api.getOrganizerWallet=async()=>response({currency:'XOF',balance_version:1,available:4500,pending:5000,held:0,paid_out:9000,payout_reserved:0,refund_reserved:0,allowed_actions:['request_payout']});
+api.getMyDesires=async()=>response([desire]);
+api.getOrganizerPayments=async()=>response({items:[{participant_name:'Aïcha K.',gross:5000,currency:'XOF',payment_status:'succeeded',funds_status:'pending',ticket_status:'active'},{participant_name:'Fatou B.',gross:5000,currency:'XOF',payment_status:'succeeded',funds_status:'available',ticket_status:'checked_in'}],paid_count:2,scanned_count:1});
+api.getPayoutDestinations=async()=>response({items:[{id,operator:'orange_money',masked_account:'•••• 42',status:'verified'}]});
+api.getPayouts=async()=>response({items:[]});
+api.createPayoutQuote=async({selectedBalance})=>response({id,destination_id:id,selected_balance:selectedBalance,recipient_amount:selectedBalance,transfer_fee:0,commission_adjustment:0,currency:'XOF',expires_at:new Date(Date.now()+600000).toISOString()});
+api.requestPayout=async()=>response({id,status:'requested'});
+api.scanCheckin=async()=>{
+    if(document.querySelector('#scenario').value==='duplicate') throw Object.assign(new Error('Billet déjà scanné'),{code:'ALREADY_SCANNED'});
+    return response({currency:'XOF',released_net:5000,organizer_credit:4500,commission_delta:500,participant_name:'Aïcha K.',available_balance:9000});
+};
+const adminCase={...booking(),booking_id:id,participant_name:'Aïcha K.',organizer_name:'Alice B.',desire_title:desire.title,event_date:desire.event_date,created_at:'2026-10-24T10:32:00Z',confirmed_at:'2026-10-24T10:32:00Z',price_amount:5000,participant_fee:0,payment_status:'succeeded',ticket_status:'checked_in',refund_status:'none',held_amount:0};
+api.getAdminPayments=async()=>response({items:[adminCase]});
+api.getAdminPaymentDetail=async()=>response({case:adminCase,tickets:[{id,issued_at:adminCase.confirmed_at,scanned_at:'2026-12-12T11:58:00Z',status:'checked_in'}],attempts:[],refunds:[],disputes:[],audit:[]});
+api.getAdminAudit=async()=>response({items:[]});
+api.financeRequest=async(path)=>{
+ if(path.startsWith('/admin/payment-events?')) return response({items:[{desire_id:id,title:desire.title,organizer_name:'Alice B.',event_date:desire.event_date,collected:10000,payment_count:2,currency:'XOF',status:'open'}],counts:{open:1,review_required:0,closed:0}});
+ if(path.startsWith('/admin/payment-events/')) return response({currency:'XOF',balances:{pending:5000,available:4500,held:0},payouts:[]});
+ if(path.endsWith('/ledger')) return response({items:[]});
+ if(path.endsWith('/operations')) return response({alerts:[],refunds:[],disputes:[],payouts:[],unscanned:[],decisions:[],ledger:[],limit:200});
+ return response({id});
+};
+// Toute requête HTTP applicative oubliée doit échouer dans cette fixture.
+window.fetch=async()=>{throw new Error('API réelle interdite dans la recette locale');};
+function show(view){
+    current=view;
+    if(view==='checkout'){confirmPaymentQuote({quote:{price_amount:5000,total_amount:5000,participant_fee:0,currency:'XOF',cancellation_available:true,cancellation_deadline:'2026-12-11T12:00:00Z'},title:desire.title,location:desire.location_name}).then(ok=>document.querySelector('#navigation').textContent=ok?'Continuation vers CinetPay demandée (simulation).':'Retour sans paiement.');return;}
+    document.querySelector('app-scan-page')?.hide();
+    const page=document.createElement(`app-${view}-page`);
+    document.querySelector('#stage').replaceChildren(page);
+    if(view==='admin'){page.querySelector('#adminPage').style.display='block';page._openSection('payments');}
+    else page.show({bookingId:id,paymentId:id,desireId:id});
+    if(captureParams.get('state')==='scan-success' && view==='scan') {
+        page._loadDesire().then(()=>page._renderSuccess({currency:'XOF',released_net:5000,organizer_credit:4500,commission_delta:500,participant_name:'Aïcha K.',available_balance:9000}));
+    }
+}
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>show(b.dataset.view));
+document.querySelector('#theme').onclick=()=>document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';
+document.querySelector('#width').onchange=e=>{document.querySelector('#stage').style.width=`${e.target.value}px`;document.documentElement.style.setProperty('--preview-width',`${e.target.value}px`);};
+document.querySelector('#scenario').onchange=()=>show(current);
+window.addEventListener('navigate-withdrawal',()=>show('withdrawal'));
+window.addEventListener('navigate-scan',()=>show('scan'));
+window.addEventListener('navigate-organizer-payments',()=>show('organizer-payments'));
+window.addEventListener('open-receipt',()=>show('receipt'));
+show(current);
+</script></body></html>
